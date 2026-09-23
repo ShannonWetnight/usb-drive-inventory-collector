@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.5.1"
+$ScriptVersion = "3.5.2"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1790,8 +1790,9 @@ function Read-ManualText {
     param ([string]$Label, [string]$Pattern, [int]$MaxLength, [switch]$Uppercase)
 
     while ($true) {
-        $Answer = Read-Host "$Label (or :cancel)"
+        $Answer = Read-Host "$Label (Enter for N/A, or :cancel)"
         if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Answer = $Answer.Trim()
         if ($Answer.Length -gt $MaxLength -or $Answer -cnotmatch $Pattern) {
             Write-Host "Invalid $Label. Use 1-$MaxLength plain letters, digits, and standard punctuation."
@@ -1810,8 +1811,48 @@ function Read-ManualSelection {
         Write-Host ("  {0}. {1}" -f ($Index + 1), $Options[$Index])
     }
     while ($true) {
-        $Answer = Read-Host 'Choose a number (or :cancel)'
+        $Answer = Read-Host 'Choose a number (Enter for N/A, or :cancel)'
         if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
+        $Number = 0
+        if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
+            return $Options[$Number - 1]
+        }
+        Write-Host "Enter a number from 1 to $($Options.Count)."
+    }
+}
+
+function Read-ManualDriveType {
+    $Groups = [ordered]@{
+        Standard = @(
+            '1.8-inch SATA SSD', '2.5-inch SATA HDD', '2.5-inch SATA SSD',
+            '3.5-inch SATA HDD', 'M.2 NVMe SSD', 'M.2 SATA SSD',
+            'mSATA SSD', 'NVMe SSD', 'SATA Drive', 'SATA HDD', 'SATA SSD'
+        )
+        Enterprise = @(
+            '2.5-inch SAS HDD', '2.5-inch SAS SSD', '3.5-inch SAS HDD',
+            '3.5-inch SAS SSD', 'SAS HDD', 'SAS SSD'
+        )
+        Other = @(
+            '3.5-inch Floppy Disk', '5.25-inch Floppy Disk',
+            'CompactFlash Card', 'eMMC', 'HDD', 'microSD Card',
+            'SD Card', 'SSD', 'USB Flash Drive', 'Other'
+        )
+    }
+
+    $Options = @()
+    Write-Host 'Drive type:'
+    foreach ($Group in $Groups.Keys) {
+        Write-Host "  ${Group}:"
+        foreach ($Option in $Groups[$Group]) {
+            $Options += $Option
+            Write-Host ('    {0}. {1}' -f $Options.Count, $Option)
+        }
+    }
+    while ($true) {
+        $Answer = Read-Host 'Choose a number (Enter for N/A, or :cancel)'
+        if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Number = 0
         if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
             return $Options[$Number - 1]
@@ -1823,8 +1864,9 @@ function Read-ManualSelection {
 function Read-ManualCapacity {
     Write-Host 'Enter the number only. Select the capacity unit next.'
     while ($true) {
-        $Amount = Read-Host 'Capacity (for example, 1; :cancel to return)'
+        $Amount = Read-Host 'Capacity (number only; Enter for N/A, or :cancel)'
         if ($null -eq $Amount -or $Amount.Trim() -eq ':cancel') { return $null }
+        if ([string]::IsNullOrWhiteSpace($Amount)) { return 'N/A' }
         $Amount = $Amount.Trim()
         if ($Amount.Length -gt 19 -or $Amount -cnotmatch '\A[0-9]{1,15}(?:\.[0-9]{1,3})?\z') {
             Write-Host 'Enter a positive number without a unit, such as 1 or 1.5.'
@@ -1838,6 +1880,7 @@ function Read-ManualCapacity {
     while ($true) {
         $Unit = Read-ManualSelection -Label 'Capacity unit' -Options @('B', 'KB', 'MB', 'GB', 'TB', 'PB', 'Other')
         if ($null -eq $Unit) { return $null }
+        if ($Unit -eq 'N/A') { return 'N/A' }
         if ($Unit -eq 'Other') {
             $Unit = Read-ManualText -Label 'Custom capacity unit (letters only)' `
                 -Pattern '\A[A-Za-z]{1,12}\z' -MaxLength 12
@@ -1859,16 +1902,7 @@ function Read-ManualField {
         3 { return (Read-ManualText -Label 'Serial number' -Pattern '\A[A-Za-z0-9][A-Za-z0-9./_-]{0,99}\z' -MaxLength 100 -Uppercase) }
         4 { return (Read-ManualCapacity) }
         5 {
-            $Type = Read-ManualSelection -Label 'Drive type' -Options @(
-                'M.2 NVMe SSD', 'NVMe SSD', 'M.2 SATA SSD', 'mSATA SSD',
-                '2.5-inch SATA SSD', '1.8-inch SATA SSD', 'SATA SSD',
-                '2.5-inch SATA HDD', '3.5-inch SATA HDD', 'SATA HDD',
-                '2.5-inch SAS SSD', '3.5-inch SAS SSD', 'SAS SSD',
-                '2.5-inch SAS HDD', '3.5-inch SAS HDD', 'SAS HDD',
-                'SATA Drive', 'SSD', 'HDD', 'USB Flash Drive',
-                'SD Card', 'microSD Card', 'CompactFlash Card', 'eMMC',
-                '3.5-inch Floppy Disk', '5.25-inch Floppy Disk', 'Other'
-            )
+            $Type = Read-ManualDriveType
             if ($null -eq $Type) { return $null }
             if ($Type -eq 'Other') {
                 return (Read-ManualText -Label 'Custom drive type' `
@@ -1894,12 +1928,13 @@ function Show-ManualRecord {
 }
 
 function Invoke-ManualEntry {
-    Write-Host ''
-    Write-Host 'Manual drive recording initialized...'
-    Write-Host 'Enter :cancel at any field to return to automatic recording.'
     Write-Log -Level INFO -Message 'Manual drive recording opened.'
 
     while ($true) {
+        Clear-Host
+        Write-Host 'Manual drive recording initialized...'
+        Write-Host 'Press Enter to record N/A for a field, or type :cancel to return to automatic recording.'
+        Write-Host ''
         $Record = [PSCustomObject]@{
             Make = $null; Model = $null; SerialNumber = $null; Capacity = $null; Type = $null
         }
@@ -1913,6 +1948,7 @@ function Invoke-ManualEntry {
             $Record.($Fields[$Index - 1]) = $Value
         }
 
+        Clear-Host
         while ($true) {
             Show-ManualRecord -Record $Record
             $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
@@ -1941,6 +1977,7 @@ function Invoke-ManualEntry {
                 $Value = Read-ManualField -Field $FieldNumber
                 if ($null -eq $Value) { return }
                 $Record.($Fields[$FieldNumber - 1]) = $Value
+                Clear-Host
                 continue
             }
             if ($Action -ne 'Y') {
@@ -1962,7 +1999,7 @@ function Invoke-ManualEntry {
             }
 
             if ($Record.SerialNumber -ne 'N/A') { $KnownSerials[$Record.SerialNumber] = $true }
-            Write-Host ''
+            Clear-Host
             Write-Host 'MANUAL DRIVE RECORDED'
             Write-Host '---------------------'
             Write-Host "Make:     $($Record.Make)"
@@ -2047,6 +2084,7 @@ try {
 
     if ($ManualEntryOnStartup) {
         Invoke-ManualEntry
+        Clear-Host
     }
 
     Write-Host 'Ready for a USB drive. Insert one to begin, or press M for manual entry.'
@@ -2056,6 +2094,7 @@ try {
     while ($true) {
         if (Test-ManualEntryHotkey) {
             Invoke-ManualEntry
+            Clear-Host
             Write-Host 'Returning to automatic recording. Insert a USB drive or press M for manual entry.'
             Write-Host ''
         }
@@ -2074,6 +2113,7 @@ try {
             # Retry only after Windows reports a removal and a new insertion.
             $ConnectedDisks[$DiskNumber] = $true
 
+            Clear-Host
             Write-Host "USB drive detected on Disk $DiskNumber."
             Write-Host "Reading drive identity..."
 
