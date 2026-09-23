@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.5.0"
+$ScriptVersion = "3.5.1"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1821,10 +1821,15 @@ function Read-ManualSelection {
 }
 
 function Read-ManualCapacity {
+    Write-Host 'Enter the number only. Select the capacity unit next.'
     while ($true) {
-        $Amount = Read-ManualText -Label 'Capacity amount (for example, 2 or 1.5)' `
-            -Pattern '\A[0-9]{1,15}(?:\.[0-9]{1,3})?\z' -MaxLength 19
-        if ($null -eq $Amount) { return $null }
+        $Amount = Read-Host 'Capacity (for example, 1; :cancel to return)'
+        if ($null -eq $Amount -or $Amount.Trim() -eq ':cancel') { return $null }
+        $Amount = $Amount.Trim()
+        if ($Amount.Length -gt 19 -or $Amount -cnotmatch '\A[0-9]{1,15}(?:\.[0-9]{1,3})?\z') {
+            Write-Host 'Enter a positive number without a unit, such as 1 or 1.5.'
+            continue
+        }
         $Number = [decimal]::Parse($Amount, [Globalization.CultureInfo]::InvariantCulture)
         if ($Number -gt 0) { break }
         Write-Host 'Capacity must be greater than zero.'
