@@ -9,6 +9,7 @@
 - [Operating Details](#operating-details)
 - [Supported USB Adapters](#supported-usb-adapters)
 - [Setup](#setup)
+    + [Stop Windows AutoPlay prompts](#stop-windows-autoplay-prompts)
 - [Output](#output)
 - [Usage](#usage)
     + [Duplicate Serial Numbers](#duplicate-serial-numbers)
@@ -115,6 +116,12 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 No output folders need to be created manually.
 
+### Stop Windows AutoPlay prompts
+
+Before collecting drives, sign in to the Windows account you will use and open **Settings → Bluetooth & devices → AutoPlay**. Turn off **Use AutoPlay for all media and devices**. This is a one-time setting for that Windows user. If your organization controls AutoPlay by policy, ask your administrator to turn it off for the collection workstation.
+
+The folder window or action prompt comes from Windows Explorer. A PowerShell script running in its own console cannot reliably cancel Explorer's AutoPlay action for each new drive. The collector suppresses critical device error dialogs raised by its own process while it runs, but it cannot silence every prompt from Explorer or another application. If Explorer is already opening drive folders automatically, change AutoPlay before starting a batch.
+
 ## Output
 
 The default layout is created beside the script:
@@ -149,6 +156,7 @@ During each insertion, the collector:
 7. Saves the workbook before waiting for the next drive.
 
 The script waits for removal before treating another device on the same Windows disk number as a new insertion.
+After a read failure, it waits for removal and reinsertion before trying that disk number again.
 
 ### Duplicate Serial Numbers
 
@@ -207,6 +215,7 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 | `RetryDelayMilliseconds` | Sets the delay between smartctl retry cycles. |
 | `WorkbookSaveRetries` | Sets the number of workbook save attempts. |
 | `WorkbookRetryDelayMilliseconds` | Sets the delay between workbook save attempts. |
+| `SmartctlTimeoutSeconds` | Maximum time for each smartctl process; default 15 seconds. A stalled probe is stopped, and the drive is skipped until removal and reinsertion. |
 | `NoDependencyInstallPrompt` | Exits instead of offering to install smartmontools when it is missing. |
 
 ## Limitations
@@ -216,4 +225,6 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 - Form factor is not always exposed. In that case Type stays broader, such as `NVMe SSD` or `SATA SSD`.
 - Manufacturer detection is conservative. An unknown model prefix returns `N/A` instead of a guessed manufacturer.
 - Keep `Inventory.xlsx` closed while collecting. The script replaces the workbook file when saving an update.
+- If a USB bridge stops responding, the collector stops an overdue smartctl process and logs the timeout. This does not reset the bridge's hardware. Unplug and reconnect a stuck adapter, then reinsert the drive. Windows device restart commands can reset a specific Plug and Play device, but restarting a shared hub or controller can interrupt other attached devices, and a restart is not guaranteed to cycle USB port power.
+- Windows may take longer than the polling interval to register removal. Wait for the console's removal message before inserting the next drive; a swap that occurs entirely between polls may be missed.
 - The collector records drive information only. It does not perform any follow-up action on the hardware.
