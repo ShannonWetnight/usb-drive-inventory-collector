@@ -74,7 +74,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.2.0"
+$ScriptVersion = "3.3.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1647,9 +1647,132 @@ Write-Host ""
 # from this table; a later insertion on the same Windows disk number is new.
 $ConnectedDisks = @{}
 
+# Windows Settings stores the current user's AutoPlay switch here. This is a
+# user preference, not the machine/user AutoPlay policy managed by Group Policy.
+$AutoPlayRegistryPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers'
+$AutoPlayRestore = $null
+
+function Set-TemporaryAutoPlayPreference {
+    if ($InteractiveUser -eq 'N/A' -or $InteractiveUser -ne $Identity.Name) {
+        Write-Host 'AutoPlay prompt skipped: this elevated account is not the signed-in desktop user.'
+        Write-Log -Level WARN -Message "AutoPlay preference skipped: process='$($Identity.Name)', desktop='$InteractiveUser'."
+        return
+    }
+
+    $Key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($AutoPlayRegistryPath, $false)
+    $KeyWasPresent = $null -ne $Key
+
+    try {
+        $HadValue = $KeyWasPresent -and (@($Key.GetValueNames()) -contains 'DisableAutoplay')
+        if ($HadValue) {
+            $OriginalKind = $Key.GetValueKind('DisableAutoplay')
+            if ($OriginalKind -ne [Microsoft.Win32.RegistryValueKind]::DWord) {
+                Write-Host 'AutoPlay uses an unexpected setting type. The Windows setting was not changed.'
+                Write-Log -Level WARN -Message "AutoPlay preference has unexpected type: $OriginalKind"
+                return
+            }
+            $OriginalValue = [int]$Key.GetValue('DisableAutoplay')
+            if ($OriginalValue -eq 1) {
+                Write-Log -Level INFO -Message 'AutoPlay is already disabled for the signed-in user.'
+                return
+            }
+        }
+        else {
+            $OriginalValue = $null
+        }
+
+        do {
+            $Choice = (Read-Host 'AutoPlay can open drive folders or show pop-ups. Disable it while collecting? [Y/N]').Trim()
+        } while ($Choice -notin @('Y', 'N'))
+
+        if ($Choice -eq 'N') {
+            Write-Log -Level INFO -Message 'User declined temporary AutoPlay change.'
+            return
+        }
+
+        # Keep the original presence and value, including an explicit zero.
+        # Register for cleanup before writing in case the write partly succeeds.
+        $WriteKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($AutoPlayRegistryPath)
+        if ($null -eq $WriteKey) { throw 'Could not open the AutoPlay preference for writing.' }
+        try {
+            $script:AutoPlayRestore = [PSCustomObject]@{
+                HadValue      = $HadValue
+                Value         = $OriginalValue
+                KeyWasPresent = $KeyWasPresent
+            }
+            $WriteKey.SetValue('DisableAutoplay', 1, [Microsoft.Win32.RegistryValueKind]::DWord)
+        }
+        finally {
+            $WriteKey.Dispose()
+        }
+        Write-Host 'AutoPlay disabled for this Windows user until the collector exits.'
+        Write-Log -Level INFO -Message 'Temporarily disabled AutoPlay for the signed-in user.'
+    }
+    finally {
+        if ($null -ne $Key) { $Key.Dispose() }
+    }
+}
+
+function Restore-AutoPlayPreference {
+    if ($null -eq $script:AutoPlayRestore) { return }
+    $RestoreState = $script:AutoPlayRestore
+
+    $Key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($AutoPlayRegistryPath, $true)
+    if ($null -eq $Key) { throw "AutoPlay registry key disappeared: HKCU\$AutoPlayRegistryPath" }
+
+    try {
+        # Leave a setting changed by the user or a policy agent during the run.
+        if ((@($Key.GetValueNames()) -notcontains 'DisableAutoplay') -or
+            $Key.GetValueKind('DisableAutoplay') -ne [Microsoft.Win32.RegistryValueKind]::DWord -or
+            [int]$Key.GetValue('DisableAutoplay') -ne 1) {
+            Write-Host 'AutoPlay changed during this run; leaving its current value in place.'
+            Write-Log -Level WARN -Message 'AutoPlay preference changed externally; original value was not restored.'
+            return
+        }
+
+        if ($RestoreState.HadValue) {
+            $Key.SetValue('DisableAutoplay', $RestoreState.Value, [Microsoft.Win32.RegistryValueKind]::DWord)
+        }
+        else {
+            $Key.DeleteValue('DisableAutoplay', $false)
+        }
+        Write-Host 'AutoPlay preference restored.'
+        Write-Log -Level INFO -Message 'Original AutoPlay preference restored.'
+        $script:AutoPlayRestore = $null
+    }
+    finally {
+        $Key.Dispose()
+    }
+
+    if (-not $RestoreState.KeyWasPresent) {
+        $ParentPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer'
+        $ParentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($ParentPath, $true)
+        if ($null -ne $ParentKey) {
+            try {
+                $ChildKey = $ParentKey.OpenSubKey('AutoplayHandlers', $false)
+                if ($null -ne $ChildKey) {
+                    try {
+                        if ($ChildKey.ValueCount -eq 0 -and $ChildKey.SubKeyCount -eq 0) {
+                            $ChildKey.Dispose()
+                            $ChildKey = $null
+                            $ParentKey.DeleteSubKey('AutoplayHandlers', $false)
+                        }
+                    }
+                    finally {
+                        if ($null -ne $ChildKey) { $ChildKey.Dispose() }
+                    }
+                }
+            }
+            finally {
+                $ParentKey.Dispose()
+            }
+        }
+    }
+}
+
 # Suppress critical device/read error dialogs generated by this PowerShell
-# process. AutoPlay belongs to Explorer and must be configured for the signed-in
-# Windows user; this process setting cannot suppress Explorer's AutoPlay UI.
+# process. Explorer's AutoPlay behavior is managed separately by the temporary
+# preference above; this process setting does not affect Explorer's dialogs.
 $PreviousErrorMode = $null
 try {
     if (-not ("DriveInventoryNativeErrorMode" -as [type])) {
@@ -1674,6 +1797,14 @@ catch {
 
 
 try {
+    try {
+        Set-TemporaryAutoPlayPreference
+    }
+    catch {
+        Write-ExceptionLog -ErrorRecord $_ -Context 'Temporary AutoPlay setup failed'
+        Write-Host 'AutoPlay setting could not be changed. Continuing with the collector.'
+    }
+
     while ($true) {
         $CurrentDisks = Get-TargetUsbDisks
         $CurrentNumbers = @{}
@@ -1842,6 +1973,13 @@ catch {
     Write-ExceptionLog -ErrorRecord $_ -Context "Unhandled collector exception"
 }
 finally {
+    try {
+        Restore-AutoPlayPreference
+    }
+    catch {
+        Write-ExceptionLog -ErrorRecord $_ -Context 'AutoPlay preference could not be restored'
+        Write-Host 'WARNING: AutoPlay could not be restored. Check Settings > Bluetooth & devices > AutoPlay.'
+    }
     if ($null -ne $PreviousErrorMode) {
         [void][DriveInventoryNativeErrorMode]::SetErrorMode($PreviousErrorMode)
     }
