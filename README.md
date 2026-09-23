@@ -124,7 +124,7 @@ If AutoPlay is enabled for the signed-in Windows user, the collector asks at sta
 AutoPlay can open drive folders or show pop-ups. Disable it while collecting? [Y/N]
 ```
 
-Choose `Y` to turn off that user's AutoPlay preference for the run. The collector remembers whether the setting existed and what value it held, then restores it when the script exits. Choose `N` to leave it alone. If AutoPlay is already off, there is no prompt. The script also skips the change when it is running as a different administrator account from the signed-in desktop user.
+Choose `Y` to turn off that user's AutoPlay preference for the run. The collector remembers whether the setting existed and what value it held, then restores it when the script exits. Choose `N` to leave it alone. If AutoPlay is already off, there is no prompt. The script compares account SIDs before making the change and skips it if the elevated account is different from the signed-in desktop user.
 
 This preference controls Windows AutoPlay, including the usual open-folder action. A workplace policy can override it, and another application can still open a folder or show its own prompt. The collector also suppresses critical device error dialogs raised by its own process while it runs. If Windows keeps opening folders, check **Settings → Bluetooth & devices → AutoPlay** or ask the workstation administrator about policy.
 
@@ -139,7 +139,7 @@ USB-Drive-Inventory-Collector.ps1
 Output\
   Inventory.xlsx
   Logs\
-    USB-Drive-Inventory-YYYYMMDD-HHMMSS.log
+    USB-Drive-Inventory-Collector-YYYYMMDD-HHMMSS.log
 ```
 
 `Output\` is excluded by this repository's `.gitignore` so serial numbers and collected inventory data are not accidentally committed.
@@ -153,6 +153,8 @@ Output\
 5. Remove it after the script reports that the record was saved.
 6. Connect the next drive.
 7. Press `Ctrl+C` when finished.
+
+After startup, the console says it is waiting for the first drive. It also prints a ready message when Windows reports that a drive has been removed. The collector stays open and waits for the next insertion until you press `Ctrl+C`.
 
 During each insertion, the collector:
 
