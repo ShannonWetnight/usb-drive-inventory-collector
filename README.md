@@ -118,9 +118,17 @@ No output folders need to be created manually.
 
 ### Stop Windows AutoPlay prompts
 
-Before collecting drives, sign in to the Windows account you will use and open **Settings → Bluetooth & devices → AutoPlay**. Turn off **Use AutoPlay for all media and devices**. This is a one-time setting for that Windows user. If your organization controls AutoPlay by policy, ask your administrator to turn it off for the collection workstation.
+If AutoPlay is enabled for the signed-in Windows user, the collector asks at startup:
 
-The folder window or action prompt comes from Windows Explorer. A PowerShell script running in its own console cannot reliably cancel Explorer's AutoPlay action for each new drive. The collector suppresses critical device error dialogs raised by its own process while it runs, but it cannot silence every prompt from Explorer or another application. If Explorer is already opening drive folders automatically, change AutoPlay before starting a batch.
+```text
+AutoPlay can open drive folders or show pop-ups. Disable it while collecting? [Y/N]
+```
+
+Choose `Y` to turn off that user's AutoPlay preference for the run. The collector remembers whether the setting existed and what value it held, then restores it when the script exits. Choose `N` to leave it alone. If AutoPlay is already off, there is no prompt. The script also skips the change when it is running as a different administrator account from the signed-in desktop user.
+
+This preference controls Windows AutoPlay, including the usual open-folder action. A workplace policy can override it, and another application can still open a folder or show its own prompt. The collector also suppresses critical device error dialogs raised by its own process while it runs. If Windows keeps opening folders, check **Settings → Bluetooth & devices → AutoPlay** or ask the workstation administrator about policy.
+
+Restoration runs during normal exit, including `Ctrl+C` and handled errors. If PowerShell is forcibly terminated or the computer loses power, cleanup cannot run; check the AutoPlay setting before the next batch. If the preference changes away from the temporary value during collection, the script leaves that newer value in place instead of overwriting it.
 
 ## Output
 
@@ -139,11 +147,12 @@ Output\
 ## Usage
 
 1. Start the script in an elevated PowerShell window.
-2. Connect a drive through a USB adapter or enclosure.
-3. Wait for the drive to be recorded.
-4. Remove it after the script reports that the record was saved.
-5. Connect the next drive.
-6. Press `Ctrl+C` when finished.
+2. Answer the AutoPlay prompt if it appears.
+3. Connect a drive through a USB adapter or enclosure.
+4. Wait for the drive to be recorded.
+5. Remove it after the script reports that the record was saved.
+6. Connect the next drive.
+7. Press `Ctrl+C` when finished.
 
 During each insertion, the collector:
 
