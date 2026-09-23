@@ -28,7 +28,7 @@
 
     Output layout beside the script:
         Output\Inventory.xlsx
-        Output\Logs\USB-Drive-Inventory-YYYYMMDD-HHMMSS.log
+        Output\Logs\USB-Drive-Inventory-Collector-YYYYMMDD-HHMMSS.log
 
     The collector checks for smartmontools/smartctl at startup. If smartctl is
     missing and WinGet is available, the user is prompted before any install is
@@ -74,7 +74,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.3.0"
+$ScriptVersion = "3.4.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -103,7 +103,7 @@ if ([string]::IsNullOrWhiteSpace($LogPath)) {
     }
 
     $LogPath = Join-Path -Path $LogDirectory -ChildPath (
-        "USB-Drive-Inventory-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss")
+        "USB-Drive-Inventory-Collector-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss")
     )
 }
 else {
@@ -1653,9 +1653,21 @@ $AutoPlayRegistryPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer\Auto
 $AutoPlayRestore = $null
 
 function Set-TemporaryAutoPlayPreference {
-    if ($InteractiveUser -eq 'N/A' -or $InteractiveUser -ne $Identity.Name) {
-        Write-Host 'AutoPlay prompt skipped: this elevated account is not the signed-in desktop user.'
-        Write-Log -Level WARN -Message "AutoPlay preference skipped: process='$($Identity.Name)', desktop='$InteractiveUser'."
+    $DesktopSid = $null
+    if ($InteractiveUser -ne 'N/A') {
+        try {
+            $DesktopSid = ([Security.Principal.NTAccount]::new($InteractiveUser)).Translate(
+                [Security.Principal.SecurityIdentifier]
+            ).Value
+        }
+        catch {
+            Write-ExceptionLog -ErrorRecord $_ -Context "Could not resolve desktop user '$InteractiveUser'"
+        }
+    }
+
+    if ($null -eq $DesktopSid -or $DesktopSid -ne $Identity.User.Value) {
+        Write-Host 'AutoPlay prompt skipped: the signed-in desktop user could not be matched to this account.'
+        Write-Log -Level WARN -Message "AutoPlay preference skipped: process='$($Identity.Name)' SID='$($Identity.User.Value)', desktop='$InteractiveUser' SID='$DesktopSid'."
         return
     }
 
@@ -1804,6 +1816,10 @@ try {
         Write-ExceptionLog -ErrorRecord $_ -Context 'Temporary AutoPlay setup failed'
         Write-Host 'AutoPlay setting could not be changed. Continuing with the collector.'
     }
+
+    Write-Host 'Ready for the first drive. Insert a USB drive to begin.'
+    Write-Host 'Waiting for a drive...'
+    Write-Host ''
 
     while ($true) {
         $CurrentDisks = Get-TargetUsbDisks
