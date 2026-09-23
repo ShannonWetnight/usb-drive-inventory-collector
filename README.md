@@ -2,6 +2,22 @@
 > **AI Workflow Notice**  
 > Parts of this project were developed with assistance from AI tools for scripting, troubleshooting, and documentation drafting. The project maintainer reviews and curates changes before publishing them. AI assistance does not replace testing, so users should review the script and validate it in their own environment before relying on the collected data.
 
+## Table of Contents
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+    + [Dependency Check](#dependency-check)
+- [Operating Details](#operating-details)
+- [Supported USB Adapters](#supported-usb-adapters)
+- [Setup](#setup)
+- [Output](#output)
+- [Usage](#usage)
+    + [Duplicate Serial Numbers](#duplicate-serial-numbers)
+    + [Read-only Behavior](#read-only-behavior)
+    + [Logs](#logs)
+    + [Parameters](#parameters)
+- [Limitations](#limitations)
+
+## Overview
 USB Drive Inventory Collector is a Windows PowerShell utility for collecting basic identity information from drives connected through USB adapters or enclosures. It writes the results to a local `.xlsx` workbook and keeps a diagnostic log for each run.
 
 It is useful anywhere you need a repeatable drive inventory: asset tracking, intake, audits, lab work, recycling preparation, or general hardware records. It does not erase, format, partition, or otherwise modify the attached drive.
