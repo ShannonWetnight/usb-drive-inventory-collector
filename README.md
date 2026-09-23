@@ -157,15 +157,15 @@ Output\
 6. Connect the next drive.
 7. Press `Ctrl+C` when finished.
 
-After startup, the console says it is waiting for a drive. It also prints a ready message when Windows reports that a drive has been removed. The collector stays open and waits for the next insertion until you press `Ctrl+C`.
+After startup, the console says it is waiting for a drive. It also prints a ready message when Windows reports that a drive has been removed. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. The collector stays open and waits for the next insertion until you press `Ctrl+C`.
 
 ### Manual drive entry
 
 Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
 
-The form asks for Make, Model, Serial Number, a numeric capacity and unit, and drive type. Capacity units include `B`, `KB`, `MB`, `GB`, `TB`, `PB`, and **Other**, which lets you enter a custom unit. Drive types are numbered choices with an **Other** option for a custom type. The form accepts plain letters, digits, spaces, and limited punctuation. Model and serial are converted to uppercase; Make keeps the case you enter. For example, an amount of `2` with unit `TB` is saved as `2 TB`.
+The form asks for Make, Model, Serial Number, a numeric capacity and unit, and drive type. Capacity units include `B`, `KB`, `MB`, `GB`, `TB`, `PB`, and **Other**, which lets you enter a custom unit. Drive types have numbered choices grouped under **Standard**, **Enterprise**, and **Other**, sorted within each group; the final **Other** choice accepts a custom type. The form accepts plain letters, digits, spaces, and limited punctuation. Model and serial are converted to uppercase; Make keeps the case you enter. For example, an amount of `2` with unit `TB` is saved as `2 TB`. Press Enter (or enter only spaces) to save `N/A` for a field. Skipping either the capacity number or unit saves the capacity as `N/A`.
 
-Before saving, review the five fields. Choose `E` and a field number to correct a value, `Y` to save, or `C` to cancel. A serial already in the workbook must be changed before you can save. `N/A` is accepted as a serial, but it cannot be checked for duplicates. A failed workbook save leaves the form open for another attempt. After saving, choose `A` to add another manual drive or `R` to resume automatic collection. Enter `:cancel` at any field to leave the form without saving that drive.
+Before saving, review the five fields. Choose `E` and a field number to correct a value, `Y` to save, or `C` to cancel. A serial already in the workbook must be changed before you can save. `N/A` is accepted as a serial, but it cannot be checked for duplicates. A failed workbook save leaves the form open for another attempt. After saving, choose `A` to add another manual drive or `R` to resume automatic collection. The console clears between entry, review, and the saved record. Enter `:cancel` at any field to leave the form without saving that drive.
 
 During each insertion, the collector:
 
