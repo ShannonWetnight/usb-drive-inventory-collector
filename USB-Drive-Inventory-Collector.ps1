@@ -70,11 +70,14 @@ param (
     [int]$SmartctlTimeoutSeconds = 15,
 
     # Suppresses the install prompt and exits if smartctl is missing.
-    [switch]$NoDependencyInstallPrompt
+    [switch]$NoDependencyInstallPrompt,
+
+    # Opens manual entry immediately (also available with M while polling).
+    [switch]$ManualEntryOnStartup
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.4.0"
+$ScriptVersion = "3.5.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1640,6 +1643,7 @@ Write-Host ""
 Write-Host "Insert one drive at a time."
 Write-Host "The workbook is saved after every drive."
 Write-Host "Do not keep the workbook open in Excel while collecting drives."
+Write-Host "Press M to add a manual drive record while waiting."
 Write-Host "Press Ctrl+C when finished."
 Write-Host ""
 
@@ -1782,6 +1786,225 @@ function Restore-AutoPlayPreference {
     }
 }
 
+function Read-ManualText {
+    param ([string]$Label, [string]$Pattern, [int]$MaxLength, [switch]$Uppercase)
+
+    while ($true) {
+        $Answer = Read-Host "$Label (or :cancel)"
+        if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        $Answer = $Answer.Trim()
+        if ($Answer.Length -gt $MaxLength -or $Answer -cnotmatch $Pattern) {
+            Write-Host "Invalid $Label. Use 1-$MaxLength plain letters, digits, and standard punctuation."
+            continue
+        }
+        if ($Uppercase) { return $Answer.ToUpperInvariant() }
+        return $Answer
+    }
+}
+
+function Read-ManualSelection {
+    param ([string]$Label, [string[]]$Options)
+
+    Write-Host "${Label}:"
+    for ($Index = 0; $Index -lt $Options.Count; $Index++) {
+        Write-Host ("  {0}. {1}" -f ($Index + 1), $Options[$Index])
+    }
+    while ($true) {
+        $Answer = Read-Host 'Choose a number (or :cancel)'
+        if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        $Number = 0
+        if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
+            return $Options[$Number - 1]
+        }
+        Write-Host "Enter a number from 1 to $($Options.Count)."
+    }
+}
+
+function Read-ManualCapacity {
+    while ($true) {
+        $Amount = Read-ManualText -Label 'Capacity amount (for example, 2 or 1.5)' `
+            -Pattern '\A[0-9]{1,15}(?:\.[0-9]{1,3})?\z' -MaxLength 19
+        if ($null -eq $Amount) { return $null }
+        $Number = [decimal]::Parse($Amount, [Globalization.CultureInfo]::InvariantCulture)
+        if ($Number -gt 0) { break }
+        Write-Host 'Capacity must be greater than zero.'
+    }
+
+    while ($true) {
+        $Unit = Read-ManualSelection -Label 'Capacity unit' -Options @('B', 'KB', 'MB', 'GB', 'TB', 'PB', 'Other')
+        if ($null -eq $Unit) { return $null }
+        if ($Unit -eq 'Other') {
+            $Unit = Read-ManualText -Label 'Custom capacity unit (letters only)' `
+                -Pattern '\A[A-Za-z]{1,12}\z' -MaxLength 12
+            if ($null -eq $Unit) { return $null }
+        }
+        if ($Unit -ne 'B' -or $Number -eq [decimal]::Truncate($Number)) { break }
+        Write-Host 'Bytes must be a whole number. Choose another unit or edit the amount later.'
+    }
+
+    return ('{0} {1}' -f $Number.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture), $Unit)
+}
+
+function Read-ManualField {
+    param ([ValidateRange(1, 5)][int]$Field)
+
+    switch ($Field) {
+        1 { return (Read-ManualText -Label 'Make' -Pattern "\A[A-Za-z0-9][A-Za-z0-9 .&()+'/_-]{0,79}\z" -MaxLength 80) }
+        2 { return (Read-ManualText -Label 'Model' -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .+/_-]{0,99}\z' -MaxLength 100 -Uppercase) }
+        3 { return (Read-ManualText -Label 'Serial number' -Pattern '\A[A-Za-z0-9][A-Za-z0-9./_-]{0,99}\z' -MaxLength 100 -Uppercase) }
+        4 { return (Read-ManualCapacity) }
+        5 {
+            $Type = Read-ManualSelection -Label 'Drive type' -Options @(
+                'M.2 NVMe SSD', 'NVMe SSD', 'M.2 SATA SSD', 'mSATA SSD',
+                '2.5-inch SATA SSD', '1.8-inch SATA SSD', 'SATA SSD',
+                '2.5-inch SATA HDD', '3.5-inch SATA HDD', 'SATA HDD',
+                '2.5-inch SAS SSD', '3.5-inch SAS SSD', 'SAS SSD',
+                '2.5-inch SAS HDD', '3.5-inch SAS HDD', 'SAS HDD',
+                'SATA Drive', 'SSD', 'HDD', 'USB Flash Drive',
+                'SD Card', 'microSD Card', 'CompactFlash Card', 'eMMC',
+                '3.5-inch Floppy Disk', '5.25-inch Floppy Disk', 'Other'
+            )
+            if ($null -eq $Type) { return $null }
+            if ($Type -eq 'Other') {
+                return (Read-ManualText -Label 'Custom drive type' `
+                    -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .()+/_-]{0,59}\z' -MaxLength 60)
+            }
+            return $Type
+        }
+    }
+}
+
+function Show-ManualRecord {
+    param ([object]$Record)
+
+    Write-Host ''
+    Write-Host 'REVIEW MANUAL DRIVE'
+    Write-Host '-------------------'
+    Write-Host "1. Make:     $($Record.Make)"
+    Write-Host "2. Model:    $($Record.Model)"
+    Write-Host "3. Serial:   $($Record.SerialNumber)"
+    Write-Host "4. Capacity: $($Record.Capacity)"
+    Write-Host "5. Type:     $($Record.Type)"
+    Write-Host ''
+}
+
+function Invoke-ManualEntry {
+    Write-Host ''
+    Write-Host 'Manual drive recording initialized...'
+    Write-Host 'Enter :cancel at any field to return to automatic recording.'
+    Write-Log -Level INFO -Message 'Manual drive recording opened.'
+
+    while ($true) {
+        $Record = [PSCustomObject]@{
+            Make = $null; Model = $null; SerialNumber = $null; Capacity = $null; Type = $null
+        }
+        $Fields = @('Make', 'Model', 'SerialNumber', 'Capacity', 'Type')
+        for ($Index = 1; $Index -le 5; $Index++) {
+            $Value = Read-ManualField -Field $Index
+            if ($null -eq $Value) {
+                Write-Log -Level INFO -Message 'Manual entry cancelled before saving.'
+                return
+            }
+            $Record.($Fields[$Index - 1]) = $Value
+        }
+
+        while ($true) {
+            Show-ManualRecord -Record $Record
+            $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
+            if ($Duplicate) {
+                Write-Host 'This serial number is already in the workbook. Edit it or cancel.'
+            }
+            elseif ($Record.SerialNumber -eq 'N/A') {
+                Write-Host 'Serial N/A cannot be checked for duplicates.'
+            }
+
+            $Action = Read-Host 'Save [Y], edit a field [E], or cancel [C]'
+            if ($null -eq $Action) { return }
+            $Action = $Action.Trim()
+            if ($Action -eq 'C') {
+                Write-Log -Level INFO -Message 'Manual entry cancelled at review.'
+                return
+            }
+            if ($Action -eq 'E') {
+                $FieldNumber = 0
+                $Choice = Read-Host 'Field to edit [1-5] (or :cancel)'
+                if ($null -eq $Choice -or $Choice.Trim() -eq ':cancel') { return }
+                if (-not [int]::TryParse($Choice.Trim(), [ref]$FieldNumber) -or $FieldNumber -lt 1 -or $FieldNumber -gt 5) {
+                    Write-Host 'Choose a field number from 1 to 5.'
+                    continue
+                }
+                $Value = Read-ManualField -Field $FieldNumber
+                if ($null -eq $Value) { return }
+                $Record.($Fields[$FieldNumber - 1]) = $Value
+                continue
+            }
+            if ($Action -ne 'Y') {
+                Write-Host 'Choose Y, E, or C.'
+                continue
+            }
+            if ($Duplicate) { continue }
+
+            [void]$Inventory.Add($Record)
+            try {
+                Write-XlsxInventory -Path $OutputPath -Records $Inventory
+            }
+            catch {
+                $Inventory.RemoveAt($Inventory.Count - 1)
+                Write-ExceptionLog -ErrorRecord $_ -Context 'Manual drive workbook save failed'
+                Write-Host "Save failed: $($_.Exception.Message)"
+                Write-Host "Check the workbook, then try saving again. Debug log: $LogPath"
+                continue
+            }
+
+            if ($Record.SerialNumber -ne 'N/A') { $KnownSerials[$Record.SerialNumber] = $true }
+            Write-Host ''
+            Write-Host 'MANUAL DRIVE RECORDED'
+            Write-Host '---------------------'
+            Write-Host "Make:     $($Record.Make)"
+            Write-Host "Model:    $($Record.Model)"
+            Write-Host "Serial:   $($Record.SerialNumber)"
+            Write-Host "Capacity: $($Record.Capacity)"
+            Write-Host "Type:     $($Record.Type)"
+            Write-Host ''
+            Write-Host "Saved as row $($Inventory.Count + 1)."
+            Write-Host ''
+            Write-Log -Level INFO -Message (
+                "Manual drive recorded: row={0}, make='{1}', model='{2}', serial='{3}', capacity='{4}', type='{5}'" -f
+                ($Inventory.Count + 1), $Record.Make, $Record.Model, $Record.SerialNumber, $Record.Capacity, $Record.Type
+            )
+            break
+        }
+
+        while ($true) {
+            $Next = Read-Host 'Add another manual drive [A] or return to automatic recording [R]'
+            if ($null -eq $Next) { return }
+            $Next = $Next.Trim()
+            if ($Next -eq 'A') { break }
+            if ($Next -eq 'R') { return }
+            Write-Host 'Choose A or R.'
+        }
+    }
+}
+
+function Test-ManualEntryHotkey {
+    if ($script:ManualHotkeyUnavailable) { return $false }
+    try {
+        while ([Console]::KeyAvailable) {
+            $Key = [Console]::ReadKey($true)
+            if ($Key.Key -eq [ConsoleKey]::M -and $Key.Modifiers -eq 0) { return $true }
+        }
+    }
+    catch {
+        $script:ManualHotkeyUnavailable = $true
+        if (-not $script:ManualHotkeyWarningShown) {
+            $script:ManualHotkeyWarningShown = $true
+            Write-Log -Level WARN -Message 'This PowerShell host does not support the M hotkey. Use -ManualEntryOnStartup.'
+            Write-Host 'Manual hotkey unavailable in this host. Restart with -ManualEntryOnStartup if needed.'
+        }
+    }
+    return $false
+}
+
 # Suppress critical device/read error dialogs generated by this PowerShell
 # process. Explorer's AutoPlay behavior is managed separately by the temporary
 # preference above; this process setting does not affect Explorer's dialogs.
@@ -1817,11 +2040,20 @@ try {
         Write-Host 'AutoPlay setting could not be changed. Continuing with the collector.'
     }
 
-    Write-Host 'Ready for the first drive. Insert a USB drive to begin.'
+    if ($ManualEntryOnStartup) {
+        Invoke-ManualEntry
+    }
+
+    Write-Host 'Ready for a USB drive. Insert one to begin, or press M for manual entry.'
     Write-Host 'Waiting for a drive...'
     Write-Host ''
 
     while ($true) {
+        if (Test-ManualEntryHotkey) {
+            Invoke-ManualEntry
+            Write-Host 'Returning to automatic recording. Insert a USB drive or press M for manual entry.'
+            Write-Host ''
+        }
         $CurrentDisks = Get-TargetUsbDisks
         $CurrentNumbers = @{}
 
