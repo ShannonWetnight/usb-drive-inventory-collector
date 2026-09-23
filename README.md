@@ -4,6 +4,9 @@ USB Drive Inventory Collector is a Windows PowerShell utility for collecting bas
 
 It is useful anywhere you need a repeatable drive inventory: asset tracking, intake, audits, lab work, recycling preparation, or general hardware records. It does not erase, format, partition, or otherwise modify the attached drive.
 
+> **AI Workflow Notice**  
+> Parts of this project were developed with assistance from AI tools for scripting, troubleshooting, and documentation drafting. The project maintainer reviews and curates changes before publishing them. AI assistance does not replace testing, so users should review the script and validate it in their own environment before relying on the collected data.
+
 ## Prerequisites
 
 - Windows
