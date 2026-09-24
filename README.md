@@ -1,6 +1,6 @@
 # USB Drive Inventory Collector
 > **AI Workflow Notice**  
-> Parts of this project were developed with assistance from AI tools for scripting, troubleshooting, and documentation drafting. The project maintainer reviews and curates changes before publishing them. AI assistance does not replace testing, so users should review the script and validate it in their own environment before relying on the collected data.
+> The script was written through AI prompting, then reviewed and curated by the project maintainer. AI tools also helped with troubleshooting and documentation. Users should review the script and validate it in their own environment before relying on the collected data.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -18,6 +18,7 @@
     + [Logs](#logs)
     + [Parameters](#parameters)
 - [Limitations](#limitations)
+- [License](#license)
 
 ## Overview
 USB Drive Inventory Collector is a Windows PowerShell utility for recording drive identity from USB adapters or manual entry. It writes the results to a local `.xlsx` workbook and keeps a diagnostic log for each run.
@@ -252,3 +253,7 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 - Windows may take longer than the polling interval to register removal. Wait for the console's removal message before inserting the next drive; a swap that occurs entirely between polls may be missed.
 - Automatic scanning pauses while a manual form is open. If you insert a USB drive then, it will be considered for automatic collection after you return to the polling loop.
 - The collector records drive information only. It does not perform any follow-up action on the hardware.
+
+## License
+
+This project is released under [The Unlicense](UNLICENSE). You may use, modify, share, or sell it without attribution. The software is provided without warranty.
