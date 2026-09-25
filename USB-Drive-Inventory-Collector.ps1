@@ -9,12 +9,13 @@
     For each newly detected USB drive, the collector:
       - Uses smartctl transport autodetection plus safe read-only fallbacks for
         common NVMe-to-USB and SATA-to-USB bridge families.
-      - Captures only:
+      - Captures these default fields:
             Make
             Model
             Serial Number
             Reported Capacity
             Type
+      - Offers [S] setup for optional identity columns; -SetupOnStartup opens it before scanning.
       - Writes N/A for information that cannot be determined reliably.
       - Appends one row to an .xlsx workbook and saves immediately.
       - Prevents duplicate serial numbers from being added.
@@ -73,11 +74,14 @@ param (
     [switch]$NoDependencyInstallPrompt,
 
     # Opens manual entry immediately (also available with M while polling).
-    [switch]$ManualEntryOnStartup
+    [switch]$ManualEntryOnStartup,
+
+    # Opens workbook column setup before probing any connected drives.
+    [switch]$SetupOnStartup
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.9"
+$ScriptVersion = "3.7.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -573,6 +577,22 @@ function Get-ReportedCapacity {
 }
 
 
+function Get-DriveInterface {
+    param ([object]$SmartctlJson, [string]$Model = 'N/A')
+
+    $Protocol = [string]$SmartctlJson.device.protocol
+    $Text = @($SmartctlJson.smartctl.output) -join "`n"
+    if ($Protocol -match 'NVMe' -or $null -ne $SmartctlJson.nvme_version) { return 'NVMe' }
+    if ($Text -match '(?im)^Transport Type:\s*Parallel\b' -or $Protocol -match '^(PATA|IDE)$') { return 'PATA' }
+    if ($null -ne $SmartctlJson.sata_version -or $Protocol -eq 'SATA' -or
+        $Text -match '(?im)^SATA Version is:') { return 'SATA' }
+    # WD Caviar Blue specifications identify this model as a 3.5-inch PATA HDD.
+    # Use an exact model family, never a broad WD prefix or missing SATA metadata.
+    if ($Model -match '^(?:WDC\s+)?WD800AAJB(?:-|$)') { return 'PATA' }
+    if ($Protocol -eq 'ATA' -or $null -ne $SmartctlJson.ata_version) { return 'ATA (interface unknown)' }
+    return (Get-CleanValue $Protocol)
+}
+
 function Get-DriveType {
 
     param (
@@ -606,6 +626,12 @@ function Get-DriveType {
     $IsSolidState = $false
     $IsRotational = $false
 
+    $Interface = Get-DriveInterface -SmartctlJson $SmartctlJson -Model $Model
+    if ($Interface -eq 'PATA' -and $Model -match '^(?:WDC\s+)?WD800AAJB(?:-|$)') {
+        if ([string]::IsNullOrWhiteSpace($FormFactor)) { $FormFactor = '3.5 inches' }
+        if ($null -eq $RotationRate) { $RotationRate = 7200 }
+    }
+
     if ($null -ne $RotationRate) {
         if ($RotationRate -eq 0) {
             $IsSolidState = $true
@@ -632,11 +658,14 @@ function Get-DriveType {
         }
     }
 
-    if (
-        $Protocol -match "(?i)ATA|SATA" -or
-        $null -ne $SmartctlJson.ata_version -or
-        $null -ne $SmartctlJson.sata_version
-    ) {
+    if ($Interface -in @('PATA', 'ATA (interface unknown)')) {
+        $Media = if ($IsSolidState) { 'SSD' } elseif ($IsRotational) { 'HDD' } else { 'Drive' }
+        $Bus = if ($Interface -eq 'PATA') { 'PATA' } else { 'ATA' }
+        $Size = if ($FormFactor -match '^(1\.8|2\.5|3\.5) inches$') { "$($Matches[1])-inch " } else { '' }
+        return "$Size$Bus $Media"
+    }
+
+    if ($Interface -eq 'SATA') {
         if ($IsSolidState) {
             switch -Regex ($FormFactor) {
                 "(?i)^M\.2$"           { return "M.2 SATA SSD" }
@@ -839,7 +868,8 @@ function Get-DriveInformation {
         foreach ($Transport in $Transports) {
             $Arguments = [System.Collections.ArrayList]::new()
             [void]$Arguments.Add("-i")
-            [void]$Arguments.Add("-j")
+            # Include original identity text: PATA transport is not always a JSON field.
+            [void]$Arguments.Add("-jo")
 
             if ($Transport -ne "auto") {
                 [void]$Arguments.Add("-d")
@@ -941,6 +971,16 @@ function Get-DriveInformation {
                     Transport        = $Transport
                     SmartctlType     = $SmartctlType
                     SmartctlExitCode = $Result.ExitCode
+                    Interface        = Get-DriveInterface -SmartctlJson $Json -Model $Model
+                    FirmwareVersion  = Get-CleanValue $Json.firmware_version
+                    ModelFamily      = Get-CleanValue $Json.model_family
+                    FormFactor       = Get-CleanValue $Json.form_factor.name
+                    RotationRate     = Get-CleanValue $Json.rotation_rate
+                    CapacityBytes    = Get-CleanValue $CapacityBytes
+                    LogicalBlockSize = Get-CleanValue $Json.logical_block_size
+                    PhysicalBlockSize = Get-CleanValue $Json.physical_block_size
+                    AtaVersion       = Get-CleanValue $Json.ata_version.string
+                    SataVersion      = Get-CleanValue $Json.sata_version.string
                 }
 
                 # ATA/SATA or NVMe is a high-confidence media identity. Prefer it
@@ -1120,6 +1160,33 @@ function Get-XlsxCellText {
 }
 
 
+function Initialize-InventoryColumns {
+    $script:ColumnCatalog = [ordered]@{
+        Make = 'Make'; Model = 'Model'; SerialNumber = 'Serial Number'
+        Capacity = 'Reported Capacity'; Type = 'Type'
+        Interface = 'Interface'; FirmwareVersion = 'Firmware Version'
+        ModelFamily = 'Model Family'; FormFactor = 'Form Factor'
+        RotationRate = 'Rotation Rate (RPM)'; CapacityBytes = 'Capacity (Bytes)'
+        LogicalBlockSize = 'Logical Sector Size (Bytes)'
+        PhysicalBlockSize = 'Physical Sector Size (Bytes)'
+        AtaVersion = 'ATA Version'; SataVersion = 'SATA Version'
+        Protocol = 'Reported Protocol'; Transport = 'Probe Transport'
+    }
+    $script:CoreColumns = @('Make', 'Model', 'SerialNumber', 'Capacity', 'Type')
+    $script:SelectedColumns = @($script:CoreColumns)
+}
+
+function Get-XlsxColumnName {
+    param ([int]$Number)
+    $Name = ''
+    while ($Number -gt 0) {
+        $Number--
+        $Name = [string][char](65 + ($Number % 26)) + $Name
+        $Number = [int][Math]::Floor($Number / 26)
+    }
+    return $Name
+}
+
 function Read-XlsxInventory {
 
     param (
@@ -1181,51 +1248,49 @@ function Read-XlsxInventory {
         $SheetXml = [System.Xml.XmlDocument]::new()
         $SheetXml.LoadXml($SheetXmlText)
 
+        $HeaderMap = @{}
+        $LoadedColumns = @()
+        $HeaderRow = $SheetXml.SelectSingleNode("//*[local-name()='sheetData']/*[local-name()='row'][@r='1']")
+        if ($null -eq $HeaderRow) { throw 'The workbook has no header row.' }
+        foreach ($Cell in $HeaderRow.SelectNodes("./*[local-name()='c']")) {
+            $Header = (Get-XlsxCellText -Cell $Cell -SharedStrings $SharedStrings).Trim()
+            if ([string]::IsNullOrWhiteSpace($Header)) { continue }
+            $Key = @($script:ColumnCatalog.Keys | Where-Object { $script:ColumnCatalog[$_] -eq $Header })
+            if ($Header -eq 'Capacity') { $Key = @('Capacity') }
+            if ($Key.Count -ne 1 -or $LoadedColumns -contains $Key[0]) {
+                throw "Unsupported or duplicate column '$Header'. Use a collector workbook; no changes were made."
+            }
+            if ($Cell.GetAttribute('r') -notmatch '^([A-Z]+)1$') { throw 'Invalid header cell reference.' }
+            $HeaderMap[$Matches[1]] = $Key[0]
+            $LoadedColumns += $Key[0]
+        }
+        foreach ($Key in $script:CoreColumns) {
+            if ($LoadedColumns -notcontains $Key) { throw "Required column '$($script:ColumnCatalog[$Key])' is missing." }
+        }
         foreach ($RowNode in $SheetXml.SelectNodes("//*[local-name()='sheetData']/*[local-name()='row']")) {
             $RowNumber = 0
-            [void][int]::TryParse($RowNode.GetAttribute("r"), [ref]$RowNumber)
-
-            if ($RowNumber -le 1) {
-                continue
-            }
-
-            $Values = @{
-                A = ""
-                B = ""
-                C = ""
-                D = ""
-                E = ""
-            }
-
+            [void][int]::TryParse($RowNode.GetAttribute('r'), [ref]$RowNumber)
+            if ($RowNumber -le 1) { continue }
+            $Values = [ordered]@{}
+            foreach ($Key in $LoadedColumns) { $Values[$Key] = 'N/A' }
+            $HasData = $false
             foreach ($Cell in $RowNode.SelectNodes("./*[local-name()='c']")) {
-                $Reference = $Cell.GetAttribute("r")
-
-                if ($Reference -match "^([A-E])\d+$") {
+                if ($Cell.GetAttribute('r') -match '^([A-Z]+)\d+$') {
                     $Column = $Matches[1]
-                    $Values[$Column] = Get-XlsxCellText -Cell $Cell -SharedStrings $SharedStrings
+                    $Value = Get-XlsxCellText -Cell $Cell -SharedStrings $SharedStrings
+                    if ($HeaderMap.ContainsKey($Column)) {
+                        $Values[$HeaderMap[$Column]] = Get-CleanValue $Value
+                        if (-not [string]::IsNullOrWhiteSpace($Value)) { $HasData = $true }
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($Value)) {
+                        throw "Data without a column header in row $RowNumber. No changes were made."
+                    }
                 }
             }
-
-            if (
-                [string]::IsNullOrWhiteSpace($Values.A) -and
-                [string]::IsNullOrWhiteSpace($Values.B) -and
-                [string]::IsNullOrWhiteSpace($Values.C) -and
-                [string]::IsNullOrWhiteSpace($Values.D) -and
-                [string]::IsNullOrWhiteSpace($Values.E)
-            ) {
-                continue
-            }
-
-            [void]$Records.Add(
-                [PSCustomObject]@{
-                    Make         = Get-CleanValue $Values.A
-                    Model        = Get-CleanValue $Values.B
-                    SerialNumber = Get-CleanValue $Values.C
-                    Capacity     = Get-CleanValue $Values.D
-                    Type         = Get-CleanValue $Values.E
-                }
-            )
+            if ($HasData) { [void]$Records.Add([PSCustomObject]$Values) }
         }
+        $script:SelectedColumns = $LoadedColumns
+
     }
     catch {
         throw "Unable to read existing workbook '$Path'. $($_.Exception.Message)"
@@ -1260,46 +1325,32 @@ function Write-XlsxInventory {
     [void]$SheetBuilder.Append('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">')
     [void]$SheetBuilder.Append('<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>')
     [void]$SheetBuilder.Append('<cols>')
-    [void]$SheetBuilder.Append('<col min="1" max="1" width="20" customWidth="1"/>')
-    [void]$SheetBuilder.Append('<col min="2" max="2" width="35" customWidth="1"/>')
-    [void]$SheetBuilder.Append('<col min="3" max="3" width="25" customWidth="1"/>')
-    [void]$SheetBuilder.Append('<col min="4" max="4" width="20" customWidth="1"/>')
-    [void]$SheetBuilder.Append('<col min="5" max="5" width="18" customWidth="1"/>')
-    [void]$SheetBuilder.Append('</cols>')
-    [void]$SheetBuilder.Append('<sheetData>')
-    [void]$SheetBuilder.Append('<row r="1">')
-    [void]$SheetBuilder.Append('<c r="A1" t="inlineStr" s="1"><is><t>Make</t></is></c>')
-    [void]$SheetBuilder.Append('<c r="B1" t="inlineStr" s="1"><is><t>Model</t></is></c>')
-    [void]$SheetBuilder.Append('<c r="C1" t="inlineStr" s="1"><is><t>Serial Number</t></is></c>')
-    [void]$SheetBuilder.Append('<c r="D1" t="inlineStr" s="1"><is><t>Reported Capacity</t></is></c>')
-    [void]$SheetBuilder.Append('<c r="E1" t="inlineStr" s="1"><is><t>Type</t></is></c>')
+    for ($Index = 0; $Index -lt $script:SelectedColumns.Count; $Index++) {
+        $Width = if ($script:SelectedColumns[$Index] -eq 'Model') { 35 } else { 25 }
+        [void]$SheetBuilder.Append(('<col min="{0}" max="{0}" width="{1}" customWidth="1"/>' -f ($Index + 1), $Width))
+    }
+    [void]$SheetBuilder.Append('</cols><sheetData><row r="1">')
+    for ($Index = 0; $Index -lt $script:SelectedColumns.Count; $Index++) {
+        $Column = Get-XlsxColumnName ($Index + 1)
+        $Header = ConvertTo-XmlText $script:ColumnCatalog[$script:SelectedColumns[$Index]]
+        [void]$SheetBuilder.Append(('<c r="{0}1" t="inlineStr" s="1"><is><t>{1}</t></is></c>' -f $Column, $Header))
+    }
     [void]$SheetBuilder.Append('</row>')
-
     $RowNumber = 2
-
     foreach ($Record in $Records) {
-        $Make = ConvertTo-XmlText (Get-CleanValue $Record.Make)
-        $Model = ConvertTo-XmlText (Get-CleanValue $Record.Model)
-        $Serial = ConvertTo-XmlText (Get-CleanValue $Record.SerialNumber)
-        $Capacity = ConvertTo-XmlText (Get-CleanValue $Record.Capacity)
-        $Type = ConvertTo-XmlText (Get-CleanValue $Record.Type)
-
         [void]$SheetBuilder.Append(('<row r="{0}">' -f $RowNumber))
-        [void]$SheetBuilder.Append(('<c r="A{0}" t="inlineStr"><is><t>{1}</t></is></c>' -f $RowNumber, $Make))
-        [void]$SheetBuilder.Append(('<c r="B{0}" t="inlineStr"><is><t>{1}</t></is></c>' -f $RowNumber, $Model))
-        [void]$SheetBuilder.Append(('<c r="C{0}" t="inlineStr"><is><t>{1}</t></is></c>' -f $RowNumber, $Serial))
-        [void]$SheetBuilder.Append(('<c r="D{0}" t="inlineStr"><is><t>{1}</t></is></c>' -f $RowNumber, $Capacity))
-        [void]$SheetBuilder.Append(('<c r="E{0}" t="inlineStr"><is><t>{1}</t></is></c>' -f $RowNumber, $Type))
+        for ($Index = 0; $Index -lt $script:SelectedColumns.Count; $Index++) {
+            $Column = Get-XlsxColumnName ($Index + 1)
+            $Value = ConvertTo-XmlText (Get-CleanValue $Record.($script:SelectedColumns[$Index]))
+            [void]$SheetBuilder.Append(('<c r="{0}{1}" t="inlineStr"><is><t>{2}</t></is></c>' -f $Column, $RowNumber, $Value))
+        }
         [void]$SheetBuilder.Append('</row>')
-
         $RowNumber++
     }
-
     [void]$SheetBuilder.Append('</sheetData>')
-
     if ($RowNumber -gt 2) {
-        $LastRow = $RowNumber - 1
-        [void]$SheetBuilder.Append(('<autoFilter ref="A1:E{0}"/>' -f $LastRow))
+        $LastColumn = Get-XlsxColumnName $script:SelectedColumns.Count
+        [void]$SheetBuilder.Append(('<autoFilter ref="A1:{0}{1}"/>' -f $LastColumn, ($RowNumber - 1)))
     }
 
     [void]$SheetBuilder.Append('</worksheet>')
@@ -1603,6 +1654,7 @@ if ($OutputPath -match '(?i)\\OneDrive(?:\s-\s[^\\]+)?\\') {
 # Load or create inventory
 # ------------------------------------------------------------
 
+Initialize-InventoryColumns
 $Inventory = [System.Collections.ArrayList]::new()
 $KnownSerials = @{}
 
@@ -1643,7 +1695,8 @@ function Show-CollectorUsage {
     Write-Host '1. Insert one USB drive at a time. The workbook is saved after each drive.'
     Write-Host '2. Remove the recorded drive, then insert the next.'
     Write-Host '3. Press [M] for manual entry or [D] for technical details while waiting.'
-    Write-Host '4. Press [Ctrl+C] when finished.'
+    Write-Host '4. Press [S] for setup to choose extra workbook columns.'
+    Write-Host '5. Press [Ctrl+C] when finished.'
     Write-Host ''
 }
 
@@ -1666,10 +1719,71 @@ function Show-CollectorTechnicalDetails {
     Write-Host 'Backend:   Direct XLSX (no Excel COM)'
     Write-Host "smartctl:  $SmartctlVersion"
     Write-Host "Timeout:   $SmartctlTimeoutSeconds seconds per smartctl process"
+    Write-Host "Columns:   $($script:SelectedColumns -join ', ')"
     Write-Host ''
-    Write-Host 'Press [D] to hide details or [M] for manual entry.'
+    Write-Host 'Press [D] to hide details, [M] for manual entry, or [S] for setup.'
     Write-Host 'Press [Ctrl+C] to stop.'
     Write-Host ''
+}
+
+function Invoke-CollectorSetup {
+    $Optional = @($script:ColumnCatalog.Keys | Where-Object { $script:CoreColumns -notcontains $_ })
+    $Chosen = @($script:SelectedColumns)
+    $Message = ''
+    while ($true) {
+        Clear-Host
+        Show-CollectorHeader
+        Show-ConsoleHeading 'WORKBOOK SETUP'
+        Write-Host 'Default columns: Make, Model, Serial Number, Reported Capacity, Type.'
+        Write-Host 'Choose optional identity fields below. Unavailable values are recorded as N/A.'
+        Write-Host 'Manual records and older rows receive N/A for added fields.'
+        Write-Host ''
+        for ($Index = 0; $Index -lt $Optional.Count; $Index++) {
+            $Mark = if ($Chosen -contains $Optional[$Index]) { 'X' } else { ' ' }
+            Write-Host ('{0,2}. [{1}] {2}' -f ($Index + 1), $Mark, $script:ColumnCatalog[$Optional[$Index]])
+        }
+        Write-Host ''
+        Write-Host 'Enter a field number to toggle it.'
+        Write-Host '[A] Select all optional fields  [D] Restore default columns'
+        Write-Host '[Y] Apply to this workbook     [C] Cancel setup'
+        Write-Host 'Note: A backup is created before changing columns.'
+        Write-Host 'Removed columns will be excluded from this workbook; their data stays in the backup.'
+        if ($Message) { Write-Host ''; Write-Host $Message }
+        $Choice = Read-Host 'Choose an option'
+        if ($null -eq $Choice) { return }
+        $Choice = $Choice.Trim()
+        $Message = ''
+        if ($Choice -eq 'C') { return }
+        if ($Choice -eq 'A') { $Chosen = @($script:ColumnCatalog.Keys); continue }
+        if ($Choice -eq 'D') { $Chosen = @($script:CoreColumns); continue }
+        if ($Choice -eq 'Y') {
+            $Previous = @($script:SelectedColumns)
+            $Next = @($script:ColumnCatalog.Keys | Where-Object { $Chosen -contains $_ })
+            if (($Previous -join '|') -eq ($Next -join '|')) { return }
+            try {
+                $Backup = "$OutputPath.before-setup-$([guid]::NewGuid().ToString('N')).xlsx"
+                Copy-Item -LiteralPath $OutputPath -Destination $Backup -ErrorAction Stop
+                Write-Log -Level INFO -Message "Setup backup created: '$Backup'"
+                $script:SelectedColumns = $Next
+                Write-XlsxInventory -Path $OutputPath -Records $Inventory
+                Write-Log -Level INFO -Message "Workbook columns updated: $($Next -join ', ')"
+                return
+            }
+            catch {
+                $script:SelectedColumns = $Previous
+                Write-ExceptionLog -ErrorRecord $_ -Context 'Workbook setup failed'
+                $Message = "Setup was not applied. $($_.Exception.Message)"
+                continue
+            }
+        }
+        $Number = 0
+        if ([int]::TryParse($Choice, [ref]$Number) -and $Number -ge 1 -and $Number -le $Optional.Count) {
+            $Key = $Optional[$Number - 1]
+            if ($Chosen -contains $Key) { $Chosen = @($Chosen | Where-Object { $_ -ne $Key }) }
+            else { $Chosen += $Key }
+        }
+        else { $Message = "Choose a number from 1 to $($Optional.Count), [A], [D], [Y], or [C]." }
+    }
 }
 
 Clear-Host
@@ -2205,6 +2319,7 @@ function Read-CollectorHotkey {
             if ($Key.Modifiers -ne 0) { continue }
             if ($Key.Key -eq [ConsoleKey]::M) { return 'M' }
             if ($Key.Key -eq [ConsoleKey]::D) { return 'D' }
+            if ($Key.Key -eq [ConsoleKey]::S) { return 'S' }
         }
     }
     catch {
@@ -2212,7 +2327,7 @@ function Read-CollectorHotkey {
         if (-not $script:ConsoleHotkeyWarningShown) {
             $script:ConsoleHotkeyWarningShown = $true
             Write-Log -Level WARN -Message 'This PowerShell host does not support console hotkeys. Use -ManualEntryOnStartup for manual entry.'
-            Write-Host 'Console hotkeys unavailable. Restart with -ManualEntryOnStartup for manual entry.'
+            Write-Host 'Console hotkeys unavailable. Use -ManualEntryOnStartup or -SetupOnStartup when starting the script.'
         }
     }
     return $null
@@ -2254,11 +2369,15 @@ try {
     }
 
     $script:TechnicalDetailsVisible = $false
+    if ($SetupOnStartup) {
+        Invoke-CollectorSetup
+        Show-CollectorWaitingScreen
+    }
     if ($ManualEntryOnStartup) {
         Invoke-ManualEntry
         Show-CollectorWaitingScreen
     }
-    else {
+    elseif (-not $SetupOnStartup) {
         Write-Host 'Waiting for a USB drive...'
         Write-Host ''
     }
@@ -2267,6 +2386,11 @@ try {
         $Hotkey = Read-CollectorHotkey
         if ($Hotkey -eq 'M') {
             Invoke-ManualEntry
+            $script:TechnicalDetailsVisible = $false
+            Show-CollectorWaitingScreen
+        }
+        elseif ($Hotkey -eq 'S') {
+            Invoke-CollectorSetup
             $script:TechnicalDetailsVisible = $false
             Show-CollectorWaitingScreen
         }
@@ -2366,6 +2490,11 @@ try {
                 Type         = $Drive.Type
             }
 
+            foreach ($Key in $script:SelectedColumns) {
+                if ($script:CoreColumns -notcontains $Key) {
+                    $Record | Add-Member -NotePropertyName $Key -NotePropertyValue (Get-CleanValue $Drive.$Key)
+                }
+            }
             [void]$Inventory.Add($Record)
 
             try {
