@@ -168,7 +168,7 @@ The form asks for Make, Model, Serial Number, a numeric capacity and unit, and d
 
 The console clears between fields, the capacity amount and unit, review, and the saved record. Before saving, review the five fields. Choose `E` and a field number to correct a value, `Y` to save, or `C` to cancel. If the workbook already has a drive, `L` replaces the draft with a copy of the last saved drive and asks for a new serial number; `:back` or `:cancel` at that serial prompt keeps the current draft. When editing, `:back` or `:cancel` returns to review without changing the field. Submitting an edited value also returns to review. During initial entry, `:cancel` leaves manual entry without saving that drive. A serial already in the workbook must be changed before you can save. `N/A` is accepted as a serial, but it cannot be checked for duplicates. A failed workbook save leaves the form open for another attempt.
 
-When you open manual entry and the workbook already has a drive, choose `N` for a new record or `C` to copy the last saved drive. Copying fills in Make, Model, Capacity, and Type, then asks for a new serial number and shows the full review before saving. After saving, choose `A` for another new drive, `C` to copy the one you just saved with a new serial, or `R` to resume automatic collection.
+When you open manual entry and the workbook already has a drive, choose `N` for a new record or `L` to copy the last saved drive. Copying fills in Make, Model, Capacity, and Type, then asks for a new serial number and shows the full review before saving. After saving, choose `A` for another new drive, `L` to copy the one you just saved with a new serial, or `R` to resume automatic collection.
 
 During each insertion, the collector:
 
