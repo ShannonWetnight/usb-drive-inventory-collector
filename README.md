@@ -158,7 +158,7 @@ Output\
 6. Connect the next drive.
 7. Press `Ctrl+C` when finished.
 
-After startup, the console says it is waiting for a drive. It also prints a ready message when Windows reports that a drive has been removed. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. The collector stays open and waits for the next insertion until you press `Ctrl+C`.
+After startup, the console says it is waiting for a drive. After a read failure or drive removal, it also reminds you that `M` opens manual entry while the collector waits. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. The collector stays open and waits for the next insertion until you press `Ctrl+C`.
 
 ### Manual drive entry
 
