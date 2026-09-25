@@ -240,7 +240,7 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 | `RetryDelayMilliseconds` | Sets the delay between smartctl retry cycles. |
 | `WorkbookSaveRetries` | Sets the number of workbook save attempts. |
 | `WorkbookRetryDelayMilliseconds` | Sets the delay between workbook save attempts. |
-| `SmartctlTimeoutSeconds` | Maximum time for each smartctl process; default 15 seconds. A stalled probe is stopped, and the drive is skipped until removal and reinsertion. |
+| `SmartctlTimeoutSeconds` | Maximum time for each smartctl process; default 30 seconds. A stalled probe is stopped, and the drive is skipped until removal and reinsertion. |
 | `NoDependencyInstallPrompt` | Exits instead of offering to install smartmontools when it is missing. |
 | `ManualEntryOnStartup` | Opens manual entry after startup; useful if the `M` console hotkey is unavailable. |
 
