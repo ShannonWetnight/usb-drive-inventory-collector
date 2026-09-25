@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.5"
+$ScriptVersion = "3.6.6"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -2056,7 +2056,7 @@ function Invoke-ManualEntry {
                 Write-Host 'Serial N/A cannot be checked for duplicates.'
             }
 
-            $Action = Read-Host 'Save [Y], save and copy for next serial [L], edit [E], or cancel [C]'
+            $Action = Read-Host 'Save and choose next [Y], save and copy [L], edit [E], or cancel [C]'
             if ($null -eq $Action) { return }
             $Action = $Action.Trim()
             if ($Action -eq 'C') {
