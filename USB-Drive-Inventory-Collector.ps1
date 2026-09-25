@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.5.3"
+$ScriptVersion = "3.5.4"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1790,10 +1790,13 @@ function Read-ManualText {
     param ([string]$Label, [string]$Pattern, [int]$MaxLength, [switch]$Uppercase, [switch]$AllowBack)
 
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
         $Answer = Read-Host "$Label ($Hint)"
-        if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
-        if ($AllowBack -and $Answer.Trim() -eq ':back') { return ':back' }
+        if ($null -eq $Answer) { return $null }
+        if ($Answer.Trim() -eq ':cancel' -or $Answer.Trim() -eq ':back') {
+            if ($AllowBack) { return ':back' }
+            if ($Answer.Trim() -eq ':cancel') { return $null }
+        }
         if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Answer = $Answer.Trim()
         if ($Answer.Length -gt $MaxLength -or $Answer -cnotmatch $Pattern) {
@@ -1813,10 +1816,13 @@ function Read-ManualSelection {
         Write-Host ("  {0}. {1}" -f ($Index + 1), $Options[$Index])
     }
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
         $Answer = Read-Host "Choose a number ($Hint)"
-        if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
-        if ($AllowBack -and $Answer.Trim() -eq ':back') { return ':back' }
+        if ($null -eq $Answer) { return $null }
+        if ($Answer.Trim() -eq ':cancel' -or $Answer.Trim() -eq ':back') {
+            if ($AllowBack) { return ':back' }
+            if ($Answer.Trim() -eq ':cancel') { return $null }
+        }
         if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Number = 0
         if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
@@ -1856,10 +1862,13 @@ function Read-ManualDriveType {
         }
     }
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
         $Answer = Read-Host "Choose a number ($Hint)"
-        if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
-        if ($AllowBack -and $Answer.Trim() -eq ':back') { return ':back' }
+        if ($null -eq $Answer) { return $null }
+        if ($Answer.Trim() -eq ':cancel' -or $Answer.Trim() -eq ':back') {
+            if ($AllowBack) { return ':back' }
+            if ($Answer.Trim() -eq ':cancel') { return $null }
+        }
         if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Number = 0
         if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
@@ -1873,10 +1882,13 @@ function Read-ManualCapacity {
     param ([switch]$AllowBack)
 
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
         $Amount = Read-Host "Capacity (number only; $Hint)"
-        if ($null -eq $Amount -or $Amount.Trim() -eq ':cancel') { return $null }
-        if ($AllowBack -and $Amount.Trim() -eq ':back') { return ':back' }
+        if ($null -eq $Amount) { return $null }
+        if ($Amount.Trim() -eq ':cancel' -or $Amount.Trim() -eq ':back') {
+            if ($AllowBack) { return ':back' }
+            if ($Amount.Trim() -eq ':cancel') { return $null }
+        }
         if ([string]::IsNullOrWhiteSpace($Amount)) { return 'N/A' }
         $Amount = $Amount.Trim()
         if ($Amount.Length -gt 22 -or $Amount -cnotmatch '\A[0-9]{1,15}(?:\.[0-9]{1,6})?\z') {
@@ -2011,7 +2023,7 @@ function Invoke-ManualEntry {
         }
 
         Clear-Host
-        while ($true) {
+        :ReviewLoop while ($true) {
             Show-ManualRecord -Record $Record
             $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
             if ($Duplicate) {
@@ -2030,28 +2042,28 @@ function Invoke-ManualEntry {
             }
             if ($Action -eq 'E') {
                 $FieldNumber = 0
-                $Choice = Read-Host 'Field to edit [1-5], :back to review, or :cancel to leave'
-                if ($null -eq $Choice -or $Choice.Trim() -eq ':cancel') { return }
-                if ($Choice.Trim() -eq ':back') {
+                $Choice = Read-Host 'Field to edit [1-5], or :back / :cancel to review'
+                if ($null -eq $Choice) { return }
+                if ([string]::IsNullOrWhiteSpace($Choice) -or $Choice.Trim() -eq ':back' -or $Choice.Trim() -eq ':cancel') {
                     Clear-Host
-                    continue
+                    continue ReviewLoop
                 }
                 if (-not [int]::TryParse($Choice.Trim(), [ref]$FieldNumber) -or $FieldNumber -lt 1 -or $FieldNumber -gt 5) {
                     Write-Host 'Choose a field number from 1 to 5.'
                     continue
                 }
                 Clear-Host
-                Write-Host "EDIT FIELD $FieldNumber (type :back to keep the current value)"
+                Write-Host "EDIT FIELD $FieldNumber (:back or :cancel keeps the current value)"
                 Write-Host ''
                 $Value = Read-ManualField -Field $FieldNumber -AllowBack
                 if ($null -eq $Value) { return }
                 if ($Value -eq ':back') {
                     Clear-Host
-                    continue
+                    continue ReviewLoop
                 }
                 $Record.($Fields[$FieldNumber - 1]) = $Value
                 Clear-Host
-                continue
+                continue ReviewLoop
             }
             if ($Action -ne 'Y') {
                 Write-Host 'Choose Y, E, or C.'
