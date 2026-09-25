@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.2"
+$ScriptVersion = "3.6.3"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -2048,18 +2048,43 @@ function Invoke-ManualEntry {
             Show-ManualRecord -Record $Record
             $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
             if ($Duplicate) {
-                Write-Host 'This serial number is already in the workbook. Edit it or cancel.'
+                Write-Host 'This serial number is already in the workbook. Edit it, copy the last saved drive, or cancel.'
             }
             elseif ($Record.SerialNumber -eq 'N/A') {
                 Write-Host 'Serial N/A cannot be checked for duplicates.'
             }
 
-            $Action = Read-Host 'Save [Y], edit a field [E], or cancel [C]'
+            $ReviewPrompt = if ($Inventory.Count -gt 0) {
+                'Save [Y], edit a field [E], copy last saved drive [L], or cancel [C]'
+            }
+            else {
+                'Save [Y], edit a field [E], or cancel [C]'
+            }
+            $Action = Read-Host $ReviewPrompt
             if ($null -eq $Action) { return }
             $Action = $Action.Trim()
             if ($Action -eq 'C') {
                 Write-Log -Level INFO -Message 'Manual entry cancelled at review.'
                 return
+            }
+            if ($Action -eq 'L' -and $Inventory.Count -gt 0) {
+                Clear-Host
+                Write-Host 'COPY LAST SAVED DRIVE - NEW SERIAL'
+                Write-Host ':back or :cancel returns to the current review without changing it.'
+                Write-Host ''
+                $NewSerial = Read-ManualField -Field 3 -AllowBack
+                if ($null -eq $NewSerial) { return }
+                if ($NewSerial -eq ':back') {
+                    Clear-Host
+                    continue ReviewLoop
+                }
+                $Source = $Inventory[$Inventory.Count - 1]
+                $Record = [PSCustomObject]@{
+                    Make = $Source.Make; Model = $Source.Model; SerialNumber = $NewSerial
+                    Capacity = $Source.Capacity; Type = $Source.Type
+                }
+                Clear-Host
+                continue ReviewLoop
             }
             if ($Action -eq 'E') {
                 $FieldNumber = 0
@@ -2087,10 +2112,13 @@ function Invoke-ManualEntry {
                 continue ReviewLoop
             }
             if ($Action -ne 'Y') {
-                Write-Host 'Choose Y, E, or C.'
-                continue
+                Clear-Host
+                continue ReviewLoop
             }
-            if ($Duplicate) { continue }
+            if ($Duplicate) {
+                Clear-Host
+                continue ReviewLoop
+            }
 
             [void]$Inventory.Add($Record)
             try {
