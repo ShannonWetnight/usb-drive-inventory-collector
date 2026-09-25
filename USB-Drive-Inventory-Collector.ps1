@@ -67,7 +67,7 @@ param (
 
     # Maximum time to wait for an individual smartctl process.
     [ValidateRange(2, 120)]
-    [int]$SmartctlTimeoutSeconds = 15,
+    [int]$SmartctlTimeoutSeconds = 30,
 
     # Suppresses the install prompt and exits if smartctl is missing.
     [switch]$NoDependencyInstallPrompt,
@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.5.4"
+$ScriptVersion = "3.5.5"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
