@@ -12,6 +12,8 @@
     + [Stop Windows AutoPlay prompts](#stop-windows-autoplay-prompts)
 - [Output](#output)
 - [Usage](#usage)
+    + [Windows GUI (v4.0.0)](#windows-gui-v400)
+    + [Console workflow](#console-workflow)
     + [Workbook column setup](#workbook-column-setup)
     + [Duplicate Serial Numbers](#duplicate-serial-numbers)
     + [Manual drive entry](#manual-drive-entry)
@@ -24,14 +26,14 @@
 - [License](#license)
 
 ## Overview
-USB Drive Inventory Collector is a Windows PowerShell utility for recording drive identity from USB adapters or manual entry. It writes the results to a local `.xlsx` workbook and keeps a diagnostic log for each run.
+USB Drive Inventory Collector is a Windows PowerShell utility for recording drive identity from USB adapters or manual entry. Version 4.0.0 includes a Windows GUI and keeps the console script available. Both write the same local `.xlsx` workbook format and create a diagnostic log for each run.
 
 It is useful anywhere you need a repeatable drive inventory: asset tracking, intake, audits, lab work, recycling preparation, or general hardware records. It does not erase, format, partition, or otherwise modify the attached drive.
 
 ## Prerequisites
 
 - Windows
-- Windows PowerShell 5.1 or later
+- Windows PowerShell 5.1 or later (an STA session for the GUI)
 - Administrator privileges
 - Windows Storage module (`Get-Disk`)
 - smartmontools / `smartctl`
@@ -42,7 +44,7 @@ Microsoft Excel is not required. The workbook is written directly in XLSX/OpenXM
 
 The collector checks for `smartctl` when it starts.
 
-If smartmontools is missing and WinGet is available, it asks before installing anything:
+If smartmontools is missing and WinGet is available, it asks before installing anything. The GUI asks in a Windows dialog; the console shows:
 
 ```text
 Install smartmontools now using WinGet? [Y/N]
@@ -108,7 +110,7 @@ This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB 
 
 ## Setup
 
-1. Download `USB-Drive-Inventory-Collector.ps1` and place it in its own folder.
+1. Download `USB-Drive-Inventory-Collector.ps1` and `USB-Drive-Inventory-Collector-GUI.ps1` into the same folder.
 2. Open Windows PowerShell as Administrator.
 3. Change to the folder containing the script.
 4. If the local execution policy blocks the script, allow it for the current PowerShell process:
@@ -117,11 +119,13 @@ This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB 
 Set-ExecutionPolicy -Scope Process Bypass
 ```
 
-5. Start the collector:
+5. Start the GUI:
 
 ```powershell
-.\USB-Drive-Inventory-Collector.ps1
+.\USB-Drive-Inventory-Collector-GUI.ps1
 ```
+
+To use the console workflow, start `USB-Drive-Inventory-Collector.ps1` instead.
 
 No output folders need to be created manually.
 
@@ -141,10 +145,11 @@ Restoration runs during normal exit, including `Ctrl+C` and handled errors. If P
 
 ## Output
 
-The default layout is created beside the script:
+The default layout is created beside the scripts:
 
 ```text
 USB-Drive-Inventory-Collector.ps1
+USB-Drive-Inventory-Collector-GUI.ps1
 Output\
   Inventory.xlsx
   Logs\
@@ -154,6 +159,18 @@ Output\
 `Output\` is excluded by this repository's `.gitignore` so serial numbers and collected inventory data are not accidentally committed.
 
 ## Usage
+
+### Windows GUI (v4.0.0)
+
+Launch the GUI from an elevated STA PowerShell window. It starts scanning after startup, and the status line reports detection, saving, duplicates, removals, and read errors. **Recorded drives** shows existing rows and selected workbook columns; **Activity** shows recent events; **Details** shows paths, smartctl version, settings, and the selected columns. The debug log on disk keeps the full probe history.
+
+Use **Pause scanning** to stop new scans; a probe already running will finish. **Manual entry** opens a form with the same field validation, `N/A` handling, capacity units, categorized drive types, and custom **Other** choices as the console. Review before saving; from review you can edit, save and start another record, or save and copy everything except the serial. A duplicate serial gives you the choice to change it or cancel. **Copy last** starts with the last saved drive's five standard fields and an empty serial. **Workbook setup** selects optional identity columns and makes a backup before a layout change. **Finish** waits for a probe in progress, restores the temporary AutoPlay setting, and closes the window.
+
+The GUI runs drive probes in a background PowerShell runspace, so slow smartctl calls do not block the controls. Manual entry and setup can be opened during a probe; the result is processed after the dialog closes. The collector handles one newly inserted disk per scan and requires removal before retrying a disk that failed to read.
+
+The GUI uses the drive classification, smartctl transport fallbacks, direct XLSX writer, logging, and AutoPlay restoration functions in the adjacent console script. Keep both files together. Windows Forms adds no Excel dependency or separate GUI package.
+
+### Console workflow
 
 1. Start the script in an elevated PowerShell window.
 2. Answer the AutoPlay prompt if it appears.
@@ -167,10 +184,11 @@ The waiting screen shows the version, maintainer, repository link, and a numbere
 
 ### Workbook column setup
 
-Press `[S]` while waiting to open setup. To configure columns before any connected drive is probed, start with:
+In the GUI, click **Workbook setup**. In the console, press `[S]` while waiting. To configure columns before any connected drive is probed, start either entry point with `-SetupOnStartup`:
 
 ```powershell
-.\USB-Drive-Inventory-Collector.ps1 -SetupOnStartup
+.\USB-Drive-Inventory-Collector-GUI.ps1 -SetupOnStartup
+# Or: .\USB-Drive-Inventory-Collector.ps1 -SetupOnStartup
 ```
 
 The five default columns stay in place. You can add Interface, Firmware Version, Model Family, Form Factor, Rotation Rate (RPM), Capacity (Bytes), Logical and Physical Sector Sizes, ATA Version, SATA Version, Reported Protocol, and Probe Transport. These values come from the identity query already used by the collector. Setup does not run SMART health tests or collect every vendor-specific attribute.
@@ -236,11 +254,11 @@ Each run creates a timestamped log under `Output\Logs` containing information us
 - workbook save attempts
 - exception type, HRESULT, stack position, and inner exceptions when available
 
-If a drive read or workbook update fails, the console prints the path to that run's log.
+If a drive read or workbook update fails, the console prints the path to that run's log. The GUI lists the error in **Activity** and shows the log path in **Details**.
 
 ### Parameters
 
-The defaults are enough for normal use. Paths and polling behavior can also be overridden:
+The defaults are enough for normal use. Both entry points accept paths and polling settings:
 
 ```powershell
 .\USB-Drive-Inventory-Collector.ps1 `
@@ -280,11 +298,11 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 
 ## Roadmap
 
-- **v4.0.0:** Consider a GUI for drive collection, manual entry, and workbook setup. This is a planned direction; the current release remains a console script.
+- Investigate safe recovery for USB adapters that stop responding. Restarting a shared controller could interrupt unrelated devices, so the current collector reports the timeout and waits for the adapter to be reconnected.
 
 ## Tests
 
-Run `pwsh -NoProfile -File tests/Collector.Tests.ps1` (or use `powershell` on Windows). The tests load functions without running Windows initialization or probing disks. They cover drive classification, workbook round trips, and setup cancellation, backups, and save failures.
+Run `pwsh -NoProfile -File tests/Collector.Tests.ps1` and `pwsh -NoProfile -File tests/GUI.Tests.ps1` (or use `powershell` on Windows). These tests load functions without accessing attached drives. They cover classification, workbook round trips, setup, manual validation, and an asynchronous scan with a simulated disk. The Windows Forms interface still needs a real Windows workstation and USB adapter for final UI testing.
 
 ## License
 
