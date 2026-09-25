@@ -162,7 +162,14 @@ Output\
 
 ### Windows GUI (v4.0.0)
 
-Launch the GUI from an elevated STA PowerShell window. It starts scanning after startup, and the status line reports detection, saving, duplicates, removals, and read errors. **Recorded drives** shows existing rows and selected workbook columns; **Activity** shows recent events; **Details** shows paths, smartctl version, settings, and the selected columns. The debug log on disk keeps the full probe history.
+Launch the GUI from an elevated STA PowerShell window:
+
+```powershell
+powershell.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector-GUI.ps1
+# Or: pwsh.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector-GUI.ps1
+```
+
+It starts scanning after startup, and the status line reports detection, saving, duplicates, removals, and read errors. **Recorded drives** shows existing rows and selected workbook columns; **Activity** shows recent events; **Details** shows paths, smartctl version, settings, and the selected columns. The debug log on disk keeps the full probe history.
 
 Use **Pause scanning** to stop new scans; a probe already running will finish. **Manual entry** opens a form with the same field validation, `N/A` handling, capacity units, categorized drive types, and custom **Other** choices as the console. Review before saving; from review you can edit, save and start another record, or save and copy everything except the serial. A duplicate serial gives you the choice to change it or cancel. **Copy last** starts with the last saved drive's five standard fields and an empty serial. **Workbook setup** selects optional identity columns and makes a backup before a layout change. **Finish** waits for a probe in progress, restores the temporary AutoPlay setting, and closes the window.
 
@@ -292,8 +299,8 @@ The defaults are enough for normal use. Both entry points accept paths and polli
 - Manufacturer detection is conservative. An unknown model prefix returns `N/A` instead of a guessed manufacturer.
 - Keep `Inventory.xlsx` closed while collecting. The script replaces the workbook file when saving an update.
 - If a USB bridge stops responding, the collector stops an overdue smartctl process and logs the timeout. This does not reset the bridge's hardware. Unplug and reconnect a stuck adapter, then reinsert the drive. Windows device restart commands can reset a specific Plug and Play device, but restarting a shared hub or controller can interrupt other attached devices, and a restart is not guaranteed to cycle USB port power.
-- Windows may take longer than the polling interval to register removal. Wait for the console's removal message before inserting the next drive; a swap that occurs entirely between polls may be missed.
-- Automatic scanning pauses while a manual form is open. If you insert a USB drive then, it will be considered for automatic collection after you return to the polling loop.
+- Windows may take longer than the polling interval to register removal. Wait for the removal message before inserting the next drive; a swap that occurs entirely between polls may be missed.
+- In the console, automatic scanning pauses during manual entry. In the GUI, a running probe can finish while a dialog is open; its result is processed after the dialog closes.
 - The collector records drive information only. It does not perform any follow-up action on the hardware.
 
 ## Roadmap
