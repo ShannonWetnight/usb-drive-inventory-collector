@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.0"
+$ScriptVersion = "3.6.1"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -2227,6 +2227,7 @@ try {
                 Write-Host ""
                 Write-Host "Remove the drive and reinsert it to retry."
                 Write-Host "Debug log: $LogPath"
+                Write-Host "Press M to enter this drive manually while the collector waits."
                 Write-Host ""
                 continue
             }
@@ -2327,7 +2328,7 @@ try {
         # indication that the previous drive is fully gone before the next swap.
         foreach ($PreviousDiskNumber in @($ConnectedDisks.Keys)) {
             if (-not $CurrentNumbers.ContainsKey($PreviousDiskNumber)) {
-                Write-Host "Disk $PreviousDiskNumber removed. Ready for the next drive."
+                Write-Host "Disk $PreviousDiskNumber removed. Insert the next drive or press M for manual entry."
                 Write-Host ""
                 Write-Log -Level INFO -Message "USB disk removal detected: disk=$PreviousDiskNumber"
             }
