@@ -158,7 +158,7 @@ Output\
 6. Connect the next drive.
 7. Press `Ctrl+C` when finished.
 
-The waiting screen shows the version, maintainer, and collection instructions. Press `D` while waiting to see the full output and log paths, USB adapter scope, workbook backend, smartctl version, and probe timeout; press `D` again to hide them. Press `M` for manual entry. After a read failure or drive removal, the console reminds you that `M` opens manual entry. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. Press `Ctrl+C` when finished.
+The waiting screen shows the version, maintainer, repository link, and a numbered Usage section. Press `[D]` while waiting to see the full output and log paths, USB adapter scope, workbook backend, smartctl version, and probe timeout; press `[D]` again to hide them. Press `[M]` for manual entry. After a read failure or drive removal, the console reminds you that `[M]` opens manual entry. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. Press `[Ctrl+C]` when finished.
 
 ### Manual drive entry
 
