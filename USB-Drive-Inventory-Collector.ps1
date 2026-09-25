@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.6"
+$ScriptVersion = "3.6.7"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -2050,7 +2050,24 @@ function Invoke-ManualEntry {
             Show-ManualRecord -Record $Record
             $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
             if ($Duplicate) {
-                Write-Host 'This serial number is already in the workbook. Edit it or cancel; this record cannot be saved twice.'
+                Write-Host 'This serial number is already in the workbook. Enter a different serial or cancel.'
+                $DuplicateAction = Read-Host 'Change serial [S] or cancel [C]'
+                if ($null -eq $DuplicateAction) { return }
+                $DuplicateAction = $DuplicateAction.Trim()
+                if ($DuplicateAction -eq 'C') {
+                    Write-Log -Level INFO -Message 'Manual entry cancelled at duplicate serial review.'
+                    return
+                }
+                if ($DuplicateAction -eq 'S') {
+                    Clear-Host
+                    Write-Host 'CHANGE SERIAL NUMBER (:back or :cancel keeps the current value)'
+                    Write-Host ''
+                    $NewSerial = Read-ManualField -Field 3 -AllowBack
+                    if ($null -eq $NewSerial) { return }
+                    if ($NewSerial -ne ':back') { $Record.SerialNumber = $NewSerial }
+                }
+                Clear-Host
+                continue ReviewLoop
             }
             elseif ($Record.SerialNumber -eq 'N/A') {
                 Write-Host 'Serial N/A cannot be checked for duplicates.'
