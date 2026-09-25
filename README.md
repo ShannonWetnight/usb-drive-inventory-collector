@@ -12,12 +12,15 @@
     + [Stop Windows AutoPlay prompts](#stop-windows-autoplay-prompts)
 - [Output](#output)
 - [Usage](#usage)
+    + [Workbook column setup](#workbook-column-setup)
     + [Duplicate Serial Numbers](#duplicate-serial-numbers)
     + [Manual drive entry](#manual-drive-entry)
     + [Read-only Behavior](#read-only-behavior)
     + [Logs](#logs)
     + [Parameters](#parameters)
 - [Limitations](#limitations)
+- [Roadmap](#roadmap)
+- [Tests](#tests)
 - [License](#license)
 
 ## Overview
@@ -55,7 +58,7 @@ To disable the install prompt and exit when the dependency is missing:
 
 ## Operating Details
 
-Each drive is written to `Output\Inventory.xlsx` with five fields:
+By default, each drive is written to `Output\Inventory.xlsx` with five fields:
 
 | Column | Description |
 | --- | --- |
@@ -82,7 +85,9 @@ Type can be reported as values such as:
 - `HDD`
 - `N/A`
 
-The collector only reports a specific form factor when the drive or adapter exposes enough information to support it. An NVMe drive, for example, is reported as `NVMe SSD` rather than assumed to be M.2 when its physical form factor is unavailable.
+The collector reports a specific form factor when the drive exposes it or an exact known model identifies it. An NVMe drive is reported as `NVMe SSD` when its physical form factor is unavailable.
+
+ATA does not automatically mean SATA. The collector checks SATA metadata and the original smartctl identity text for explicit PATA transport information. PATA drives can be reported as `PATA Drive`, `PATA HDD`, or `PATA SSD`, with a form factor when known. `WD800AAJB` has a specific fallback to `3.5-inch PATA HDD` when older identify data omits the interface or media details. Other ATA drives without enough evidence are recorded as `ATA Drive`, `ATA HDD`, or `ATA SSD`. IDE and PATA refer to the same interface family. Existing workbook rows are not reclassified automatically.
 
 Manual entry offers these types plus 2.5-inch and 3.5-inch IDE HDDs, generic IDE drives, IDE HDDs and SSDs, SAS SSDs and HDDs, USB flash drives, SD and microSD cards, CompactFlash cards, eMMC, 3.5-inch and 5.25-inch floppy disks, and a custom **Other** choice. The added options are for manual records; they do not change what smartctl can identify automatically.
 
@@ -160,6 +165,22 @@ Output\
 
 The waiting screen shows the version, maintainer, repository link, and a numbered Usage section. Press `[D]` while waiting to see the full output and log paths, USB adapter scope, workbook backend, smartctl version, and probe timeout; press `[D]` again to hide them. Press `[M]` for manual entry. After a read failure or drive removal, the console reminds you that `[M]` opens manual entry. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. Press `[Ctrl+C]` when finished.
 
+### Workbook column setup
+
+Press `[S]` while waiting to open setup. To configure columns before any connected drive is probed, start with:
+
+```powershell
+.\USB-Drive-Inventory-Collector.ps1 -SetupOnStartup
+```
+
+The five default columns stay in place. You can add Interface, Firmware Version, Model Family, Form Factor, Rotation Rate (RPM), Capacity (Bytes), Logical and Physical Sector Sizes, ATA Version, SATA Version, Reported Protocol, and Probe Transport. These values come from the identity query already used by the collector. Setup does not run SMART health tests or collect every vendor-specific attribute.
+
+Enter a field number to toggle it, `[A]` to select all extra fields, or `[D]` for the default layout. `[Y]` applies the selection; `[C]` cancels it. Before changing columns, the collector copies the workbook to a file named `Inventory.xlsx.before-setup-<unique ID>.xlsx` beside the original. Removing a column excludes its data from the active workbook; the backup retains it.
+
+The workbook headers remember the selection on the next run. Existing values in retained columns survive later saves. Newly added columns contain `N/A` for older records, manual records, and details the adapter does not expose. Copying a manual record copies the five core fields and asks for a new serial; optional identity details remain `N/A`. Automatic collection pauses while setup is open.
+
+Use a separate output workbook for a different collection layout. Unsupported or duplicate headers stop the collector before it overwrites the workbook.
+
 ### Manual drive entry
 
 Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
@@ -177,7 +198,7 @@ During each insertion, the collector:
 3. Gives the USB bridge a short period to initialize.
 4. Probes supported smartctl transports.
 5. Reads the underlying drive identity when available.
-6. Appends Make, Model, Serial Number, Reported Capacity, and Type to `Inventory.xlsx`.
+6. Appends the five standard fields and any selected extra fields to `Inventory.xlsx`.
 7. Saves the workbook before waiting for the next drive.
 
 The script waits for removal before treating another device on the same Windows disk number as a new insertion.
@@ -242,6 +263,7 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 | `WorkbookRetryDelayMilliseconds` | Sets the delay between workbook save attempts. |
 | `SmartctlTimeoutSeconds` | Maximum time for each smartctl process; default 30 seconds. A stalled probe is stopped, and the drive is skipped until removal and reinsertion. |
 | `NoDependencyInstallPrompt` | Exits instead of offering to install smartmontools when it is missing. |
+| `SetupOnStartup` | Opens workbook column setup before probing connected drives. |
 | `ManualEntryOnStartup` | Opens manual entry after startup; useful if the `M` console hotkey is unavailable. |
 
 ## Limitations
@@ -255,6 +277,14 @@ The defaults are enough for normal use. Paths and polling behavior can also be o
 - Windows may take longer than the polling interval to register removal. Wait for the console's removal message before inserting the next drive; a swap that occurs entirely between polls may be missed.
 - Automatic scanning pauses while a manual form is open. If you insert a USB drive then, it will be considered for automatic collection after you return to the polling loop.
 - The collector records drive information only. It does not perform any follow-up action on the hardware.
+
+## Roadmap
+
+- **v4.0.0:** Consider a GUI for drive collection, manual entry, and workbook setup. This is a planned direction; the current release remains a console script.
+
+## Tests
+
+Run `pwsh -NoProfile -File tests/Collector.Tests.ps1` (or use `powershell` on Windows). The tests load functions without running Windows initialization or probing disks. They cover drive classification, workbook round trips, and setup cancellation, backups, and save failures.
 
 ## License
 
