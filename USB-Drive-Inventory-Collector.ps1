@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.7"
+$ScriptVersion = "3.6.8"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -249,6 +249,13 @@ function Find-SmartctlExecutable {
 }
 
 
+function Show-ConsoleHeading {
+    param ([string]$Title)
+
+    Write-Host $Title
+    Write-Host ('-' * $Title.Length)
+}
+
 function Ensure-SmartctlDependency {
 
     $Existing = Find-SmartctlExecutable
@@ -258,8 +265,7 @@ function Ensure-SmartctlDependency {
     }
 
     Write-Host ""
-    Write-Host "DEPENDENCY REQUIRED"
-    Write-Host "-------------------"
+    Show-ConsoleHeading 'DEPENDENCY REQUIRED'
     Write-Host "smartmontools (smartctl) is required to read drive identity through USB adapters."
     Write-Host ""
 
@@ -1627,27 +1633,32 @@ else {
 
 
 function Show-CollectorHeader {
-    Write-Host "USB Drive Inventory Collector v$ScriptVersion"
-    Write-Host 'Maintainer: Shannon Wetnight'
+    Show-ConsoleHeading "USB Drive Inventory Collector v$ScriptVersion"
+    Write-Host 'Maintainer: Shannon Wetnight | https://github.com/ShannonWetnight/usb-drive-inventory-collector'
+    Write-Host ''
+}
+
+function Show-CollectorUsage {
+    Show-ConsoleHeading 'USAGE'
+    Write-Host '1. Insert one USB drive at a time. The workbook is saved after each drive.'
+    Write-Host '2. Remove the recorded drive, then insert the next.'
+    Write-Host '3. Press [M] for manual entry or [D] for technical details while waiting.'
+    Write-Host '4. Press [Ctrl+C] when finished.'
     Write-Host ''
 }
 
 function Show-CollectorWaitingScreen {
     Clear-Host
     Show-CollectorHeader
-    Write-Host 'Insert one drive at a time. The workbook is saved after every drive.'
-    Write-Host 'Keep the workbook closed in Excel while collecting.'
-    Write-Host ''
-    Write-Host 'Waiting for a USB drive. Press M for manual entry or D for technical details.'
-    Write-Host 'Press Ctrl+C when finished.'
+    Show-CollectorUsage
+    Write-Host 'Waiting for a USB drive...'
     Write-Host ''
 }
 
 function Show-CollectorTechnicalDetails {
     Clear-Host
     Show-CollectorHeader
-    Write-Host 'TECHNICAL DETAILS'
-    Write-Host '-----------------'
+    Show-ConsoleHeading 'TECHNICAL DETAILS'
     Write-Host 'Scope:     USB physical drives (boot and system disks excluded)'
     Write-Host 'Adapters:  smartctl auto-detection with NVMe/SATA USB transport fallbacks'
     Write-Host "Output:    $OutputPath"
@@ -1656,17 +1667,14 @@ function Show-CollectorTechnicalDetails {
     Write-Host "smartctl:  $SmartctlVersion"
     Write-Host "Timeout:   $SmartctlTimeoutSeconds seconds per smartctl process"
     Write-Host ''
-    Write-Host 'Press D to hide details or M for manual entry. Press Ctrl+C to stop.'
+    Write-Host 'Press [D] to hide details or [M] for manual entry.'
+    Write-Host 'Press [Ctrl+C] to stop.'
     Write-Host ''
 }
 
 Clear-Host
 Show-CollectorHeader
-Write-Host 'Insert one drive at a time. The workbook is saved after every drive.'
-Write-Host 'Keep the workbook closed in Excel while collecting.'
-Write-Host 'Press M for manual entry or D for technical details while waiting.'
-Write-Host 'Press Ctrl+C when finished.'
-Write-Host ''
+Show-CollectorUsage
 
 # Tracks only USB disks that are currently attached. A removed disk disappears
 # from this table; a later insertion on the same Windows disk number is new.
@@ -1811,7 +1819,7 @@ function Read-ManualText {
     param ([string]$Label, [string]$Pattern, [int]$MaxLength, [switch]$Uppercase, [switch]$AllowBack)
 
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { '[Enter] for N/A; :back or :cancel to review' } else { '[Enter] for N/A; :cancel to stop' }
         $Answer = Read-Host "$Label ($Hint)"
         if ($null -eq $Answer) { return $null }
         if ($Answer.Trim() -eq ':cancel' -or $Answer.Trim() -eq ':back') {
@@ -1832,12 +1840,14 @@ function Read-ManualText {
 function Read-ManualSelection {
     param ([string]$Label, [string[]]$Options, [switch]$AllowBack)
 
+    Write-Host ''
     Write-Host "${Label}:"
     for ($Index = 0; $Index -lt $Options.Count; $Index++) {
         Write-Host ("  {0}. {1}" -f ($Index + 1), $Options[$Index])
     }
+    Write-Host ''
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { '[Enter] for N/A; :back or :cancel to review' } else { '[Enter] for N/A; :cancel to stop' }
         $Answer = Read-Host "Choose a number ($Hint)"
         if ($null -eq $Answer) { return $null }
         if ($Answer.Trim() -eq ':cancel' -or $Answer.Trim() -eq ':back') {
@@ -1874,16 +1884,19 @@ function Read-ManualDriveType {
     }
 
     $Options = @()
+    Write-Host ''
     Write-Host 'Drive type:'
     foreach ($Group in $Groups.Keys) {
+        Write-Host ''
         Write-Host "  ${Group}:"
         foreach ($Option in $Groups[$Group]) {
             $Options += $Option
             Write-Host ('    {0}. {1}' -f $Options.Count, $Option)
         }
     }
+    Write-Host ''
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { '[Enter] for N/A; :back or :cancel to review' } else { '[Enter] for N/A; :cancel to stop' }
         $Answer = Read-Host "Choose a number ($Hint)"
         if ($null -eq $Answer) { return $null }
         if ($Answer.Trim() -eq ':cancel' -or $Answer.Trim() -eq ':back') {
@@ -1903,7 +1916,7 @@ function Read-ManualCapacity {
     param ([switch]$AllowBack)
 
     while ($true) {
-        $Hint = if ($AllowBack) { 'Enter for N/A, :back or :cancel to review' } else { 'Enter for N/A, or :cancel' }
+        $Hint = if ($AllowBack) { '[Enter] for N/A; :back or :cancel to review' } else { '[Enter] for N/A; :cancel to stop' }
         $Amount = Read-Host "Capacity (number only; $Hint)"
         if ($null -eq $Amount) { return $null }
         if ($Amount.Trim() -eq ':cancel' -or $Amount.Trim() -eq ':back') {
@@ -1922,8 +1935,8 @@ function Read-ManualCapacity {
     }
 
     Clear-Host
-    if ($AllowBack) { Write-Host 'EDIT CAPACITY - UNIT' }
-    else { Write-Host 'Step 4 of 5 - Capacity unit' }
+    if ($AllowBack) { Show-ConsoleHeading 'EDIT CAPACITY - UNIT' }
+    else { Show-ConsoleHeading 'Step 4 of 5 - Capacity unit' }
     Write-Host "Capacity amount: $Amount"
     Write-Host ''
     while ($true) {
@@ -1933,8 +1946,8 @@ function Read-ManualCapacity {
         if ($Unit -eq 'N/A') { return 'N/A' }
         if ($Unit -eq 'Other') {
             Clear-Host
-            if ($AllowBack) { Write-Host 'EDIT CAPACITY - CUSTOM UNIT' }
-            else { Write-Host 'Step 4 of 5 - Custom capacity unit' }
+            if ($AllowBack) { Show-ConsoleHeading 'EDIT CAPACITY - CUSTOM UNIT' }
+            else { Show-ConsoleHeading 'Step 4 of 5 - Custom capacity unit' }
             Write-Host "Capacity amount: $Amount"
             Write-Host ''
             $Unit = Read-ManualText -Label 'Custom capacity unit (letters only)' `
@@ -1964,8 +1977,8 @@ function Read-ManualField {
             if ($Type -eq ':back') { return ':back' }
             if ($Type -eq 'Other') {
                 Clear-Host
-                if ($AllowBack) { Write-Host 'EDIT DRIVE TYPE - CUSTOM' }
-                else { Write-Host 'Step 5 of 5 - Custom drive type' }
+                if ($AllowBack) { Show-ConsoleHeading 'EDIT DRIVE TYPE - CUSTOM' }
+                else { Show-ConsoleHeading 'Step 5 of 5 - Custom drive type' }
                 return (Read-ManualText -Label 'Custom drive type' `
                     -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .()+/_-]{0,59}\z' -MaxLength 60 -AllowBack:$AllowBack)
             }
@@ -1978,8 +1991,7 @@ function Show-ManualRecord {
     param ([object]$Record)
 
     Write-Host ''
-    Write-Host 'REVIEW MANUAL DRIVE'
-    Write-Host '-------------------'
+    Show-ConsoleHeading 'REVIEW MANUAL DRIVE'
     Write-Host "1. Make:     $($Record.Make)"
     Write-Host "2. Model:    $($Record.Model)"
     Write-Host "3. Serial:   $($Record.SerialNumber)"
@@ -1995,17 +2007,21 @@ function Invoke-ManualEntry {
 
     while ($true) {
         Clear-Host
-        Write-Host 'Manual drive recording initialized...'
-        Write-Host 'Press Enter to record N/A for a field, or type :cancel to return to automatic recording.'
+        Show-ConsoleHeading 'MANUAL DRIVE ENTRY'
+        Write-Host 'Note: Press [Enter] to record N/A for a field.'
+        Write-Host 'Type :cancel during entry to return to automatic recording.'
         Write-Host ''
         if ($null -eq $NextMode -and $Inventory.Count -gt 0) {
             while ($true) {
-                $NextMode = Read-Host 'New drive [N], copy last saved drive [L], or return [R]'
+                Write-Host '[N] New drive'
+                Write-Host '[L] Copy last saved drive with a new serial'
+                Write-Host '[R] Return to automatic recording'
+                $NextMode = Read-Host 'Choose [N/L/R]'
                 if ($null -eq $NextMode) { return }
                 $NextMode = $NextMode.Trim()
                 if ($NextMode -eq 'R') { return }
                 if ($NextMode -eq 'N' -or $NextMode -eq 'L') { break }
-                Write-Host 'Choose N, L, or R.'
+                Write-Host 'Choose [N], [L], or [R].'
             }
         }
         if ($null -eq $NextMode) { $NextMode = 'N' }
@@ -2029,12 +2045,12 @@ function Invoke-ManualEntry {
         for ($Index = $FirstField; $Index -le $LastField; $Index++) {
             Clear-Host
             if ($NextMode -eq 'L') {
-                Write-Host 'Step 1 of 1 - Serial number'
+                Show-ConsoleHeading 'Step 1 of 1 - Serial number'
                 Write-Host 'Copying the last saved drive. Enter a new serial number.'
                 if ($null -ne $SavedRow) { Write-Host "Previous drive saved as row $SavedRow." }
             }
             else {
-                Write-Host "Step $Index of 5 - $($FieldLabels[$Index - 1])"
+                Show-ConsoleHeading "Step $Index of 5 - $($FieldLabels[$Index - 1])"
             }
             Write-Host ''
             $Value = Read-ManualField -Field $Index
@@ -2050,8 +2066,11 @@ function Invoke-ManualEntry {
             Show-ManualRecord -Record $Record
             $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
             if ($Duplicate) {
-                Write-Host 'This serial number is already in the workbook. Enter a different serial or cancel.'
-                $DuplicateAction = Read-Host 'Change serial [S] or cancel [C]'
+                Write-Host 'This serial number is already in the workbook.'
+                Write-Host ''
+                Write-Host '[S] Enter a different serial for this record'
+                Write-Host '[C] Cancel this record'
+                $DuplicateAction = Read-Host 'Choose [S/C]'
                 if ($null -eq $DuplicateAction) { return }
                 $DuplicateAction = $DuplicateAction.Trim()
                 if ($DuplicateAction -eq 'C') {
@@ -2060,7 +2079,8 @@ function Invoke-ManualEntry {
                 }
                 if ($DuplicateAction -eq 'S') {
                     Clear-Host
-                    Write-Host 'CHANGE SERIAL NUMBER (:back or :cancel keeps the current value)'
+                    Show-ConsoleHeading 'CHANGE SERIAL NUMBER'
+                    Write-Host 'Note: :back or :cancel keeps the current value.'
                     Write-Host ''
                     $NewSerial = Read-ManualField -Field 3 -AllowBack
                     if ($null -eq $NewSerial) { return }
@@ -2071,9 +2091,14 @@ function Invoke-ManualEntry {
             }
             elseif ($Record.SerialNumber -eq 'N/A') {
                 Write-Host 'Serial N/A cannot be checked for duplicates.'
+                Write-Host ''
             }
 
-            $Action = Read-Host 'Save and choose next [Y], save and copy [L], edit [E], or cancel [C]'
+            Write-Host '[Y] Save and choose next action'
+            Write-Host '[L] Save and copy with a new serial'
+            Write-Host '[E] Edit a field'
+            Write-Host '[C] Cancel this record'
+            $Action = Read-Host 'Choose [Y/L/E/C]'
             if ($null -eq $Action) { return }
             $Action = $Action.Trim()
             if ($Action -eq 'C') {
@@ -2082,18 +2107,20 @@ function Invoke-ManualEntry {
             }
             if ($Action -eq 'E') {
                 $FieldNumber = 0
-                $Choice = Read-Host 'Field to edit [1-5], or :back / :cancel to review'
+                Write-Host 'Note: [Enter], :back, or :cancel returns to review.'
+                $Choice = Read-Host 'Field to edit [1-5]'
                 if ($null -eq $Choice) { return }
                 if ([string]::IsNullOrWhiteSpace($Choice) -or $Choice.Trim() -eq ':back' -or $Choice.Trim() -eq ':cancel') {
                     Clear-Host
                     continue ReviewLoop
                 }
                 if (-not [int]::TryParse($Choice.Trim(), [ref]$FieldNumber) -or $FieldNumber -lt 1 -or $FieldNumber -gt 5) {
-                    Write-Host 'Choose a field number from 1 to 5.'
+                    Write-Host 'Choose a field number from [1-5].'
                     continue
                 }
                 Clear-Host
-                Write-Host "EDIT FIELD $FieldNumber (:back or :cancel keeps the current value)"
+                Show-ConsoleHeading "EDIT FIELD $FieldNumber"
+                Write-Host 'Note: :back or :cancel keeps the current value.'
                 Write-Host ''
                 $Value = Read-ManualField -Field $FieldNumber -AllowBack
                 if ($null -eq $Value) { return }
@@ -2123,15 +2150,16 @@ function Invoke-ManualEntry {
                 $Inventory.RemoveAt($Inventory.Count - 1)
                 Write-ExceptionLog -ErrorRecord $_ -Context 'Manual drive workbook save failed'
                 Write-Host "Save failed: $($_.Exception.Message)"
-                Write-Host "Check the workbook, then try saving again. Debug log: $LogPath"
+                Write-Host 'Check the workbook, then try saving again.'
+                Write-Host "Debug log: $LogPath"
+                Write-Host ''
                 continue
             }
 
             if ($Record.SerialNumber -ne 'N/A') { $KnownSerials[$Record.SerialNumber] = $true }
             $SavedRow = $Inventory.Count + 1
             Clear-Host
-            Write-Host 'MANUAL DRIVE RECORDED'
-            Write-Host '---------------------'
+            Show-ConsoleHeading 'MANUAL DRIVE RECORDED'
             Write-Host "Make:     $($Record.Make)"
             Write-Host "Model:    $($Record.Model)"
             Write-Host "Serial:   $($Record.SerialNumber)"
@@ -2153,13 +2181,16 @@ function Invoke-ManualEntry {
         }
 
         while ($true) {
-            $Next = Read-Host 'Add another manual drive [A], copy this drive with a new serial [L], or return [R]'
+            Write-Host '[A] Add another manual drive'
+            Write-Host '[L] Copy this drive with a new serial'
+            Write-Host '[R] Return to automatic recording'
+            $Next = Read-Host 'Choose [A/L/R]'
             if ($null -eq $Next) { return }
             $Next = $Next.Trim()
             if ($Next -eq 'A') { $NextMode = 'N'; break }
             if ($Next -eq 'L') { $NextMode = 'L'; break }
             if ($Next -eq 'R') { return }
-            Write-Host 'Choose A, L, or R.'
+            Write-Host 'Choose [A], [L], or [R].'
         }
     }
 }
@@ -2179,7 +2210,7 @@ function Read-CollectorHotkey {
         if (-not $script:ConsoleHotkeyWarningShown) {
             $script:ConsoleHotkeyWarningShown = $true
             Write-Log -Level WARN -Message 'This PowerShell host does not support console hotkeys. Use -ManualEntryOnStartup for manual entry.'
-            Write-Host 'Console hotkeys unavailable in this host. Restart with -ManualEntryOnStartup for manual entry.'
+            Write-Host 'Console hotkeys unavailable. Restart with -ManualEntryOnStartup for manual entry.'
         }
     }
     return $null
@@ -2281,12 +2312,12 @@ try {
             }
             catch {
                 Write-Host ""
-                Write-Host "ERROR: Unable to read drive."
+                Show-ConsoleHeading 'ERROR: Unable to read drive'
                 Write-Host $_.Exception.Message
                 Write-Host ""
-                Write-Host "Remove the drive and reinsert it to retry."
+                Write-Host '1. Remove the drive and reinsert it to retry.'
+                Write-Host '2. Press [M] to record this drive manually while waiting.'
                 Write-Host "Debug log: $LogPath"
-                Write-Host "Press M to enter this drive manually while the collector waits."
                 Write-Host ""
                 continue
             }
@@ -2298,8 +2329,7 @@ try {
                 $KnownSerials.ContainsKey($Drive.SerialNumber)
             ) {
                 Write-Host ""
-                Write-Host "DUPLICATE DRIVE DETECTED"
-                Write-Host "------------------------"
+                Show-ConsoleHeading 'DUPLICATE DRIVE DETECTED'
                 Write-Host "Make:     $($Drive.Make)"
                 Write-Host "Model:    $($Drive.Model)"
                 Write-Host "Serial:   $($Drive.SerialNumber)"
@@ -2308,6 +2338,8 @@ try {
                 Write-Host ""
                 Write-Host "This serial number already exists in the workbook."
                 Write-Host "No new row was added."
+                Write-Host ""
+                Write-Host 'Remove this drive and insert the next drive, or press [M] for manual entry.'
                 Write-Host ""
 
                 Write-Log -Level WARN -Message (
@@ -2342,10 +2374,12 @@ try {
                 $Inventory.RemoveAt($Inventory.Count - 1)
 
                 Write-Host ""
-                Write-Host "ERROR: Drive was read, but the workbook could not be updated."
+                Show-ConsoleHeading 'ERROR: Workbook could not be updated'
+                Write-Host 'The drive was read, but its record was not saved.'
                 Write-Host $_.Exception.Message
                 Write-Host ""
                 Write-Host "Remove the drive, correct the workbook issue, and reinsert it to retry."
+                Write-Host 'Press [M] for manual entry while waiting.'
                 Write-Host "Debug log: $LogPath"
                 Write-Host ""
                 continue
@@ -2358,8 +2392,7 @@ try {
             $RecordedRow = $Inventory.Count + 1
 
             Write-Host ""
-            Write-Host "DRIVE RECORDED"
-            Write-Host "--------------"
+            Show-ConsoleHeading 'DRIVE RECORDED'
             Write-Host "Make:     $($Drive.Make)"
             Write-Host "Model:    $($Drive.Model)"
             Write-Host "Serial:   $($Drive.SerialNumber)"
@@ -2373,7 +2406,8 @@ try {
                 "Drive recorded: row={0}, make='{1}', model='{2}', serial='{3}', capacity='{4}', type='{5}'" -f
                 $RecordedRow, $Drive.Make, $Drive.Model, $Drive.SerialNumber, $Drive.Capacity, $Drive.Type
             )
-            Write-Host "Remove this drive and insert the next drive."
+            Write-Host 'Remove this drive and insert the next drive.'
+            Write-Host 'Press [M] for manual entry or [D] for technical details while waiting.'
             Write-Host ""
 
             try {
@@ -2387,7 +2421,7 @@ try {
         # indication that the previous drive is fully gone before the next swap.
         foreach ($PreviousDiskNumber in @($ConnectedDisks.Keys)) {
             if (-not $CurrentNumbers.ContainsKey($PreviousDiskNumber)) {
-                Write-Host "Disk $PreviousDiskNumber removed. Insert the next drive or press M for manual entry."
+                Write-Host "Disk $PreviousDiskNumber removed. Insert the next drive or press [M] for manual entry."
                 Write-Host ""
                 Write-Log -Level INFO -Message "USB disk removal detected: disk=$PreviousDiskNumber"
             }
@@ -2404,7 +2438,8 @@ catch [System.Management.Automation.PipelineStoppedException] {
 }
 catch {
     Write-Host ""
-    Write-Host "FATAL ERROR: The collector encountered an unexpected exception."
+    Show-ConsoleHeading 'FATAL ERROR'
+    Write-Host 'The collector encountered an unexpected exception.'
     Write-Host $_.Exception.Message
     Write-Host "Debug log: $LogPath"
     Write-Host ""
@@ -2425,7 +2460,7 @@ finally {
     Write-Log -Level INFO -Message ("Collector stopped. Final in-memory record count={0}" -f $Inventory.Count)
 
     Write-Host ""
-    Write-Host "Inventory collector stopped."
+    Show-ConsoleHeading 'Inventory collector stopped'
     Write-Host "Inventory saved:"
     Write-Host "  $OutputPath"
     Write-Host "Debug log:"
