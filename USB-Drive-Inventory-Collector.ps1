@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.8"
+$ScriptVersion = "3.6.9"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1868,9 +1868,11 @@ function Read-ManualDriveType {
 
     $Groups = [ordered]@{
         Standard = @(
-            '1.8-inch SATA SSD', '2.5-inch SATA HDD', '2.5-inch SATA SSD',
-            '3.5-inch SATA HDD', 'M.2 NVMe SSD', 'M.2 SATA SSD',
-            'mSATA SSD', 'NVMe SSD', 'SATA Drive', 'SATA HDD', 'SATA SSD'
+            '1.8-inch SATA SSD', '2.5-inch IDE HDD', '2.5-inch SATA HDD',
+            '2.5-inch SATA SSD', '3.5-inch IDE HDD', '3.5-inch SATA HDD',
+            'IDE Drive', 'IDE HDD', 'IDE SSD', 'M.2 NVMe SSD',
+            'M.2 SATA SSD', 'mSATA SSD', 'NVMe SSD',
+            'SATA Drive', 'SATA HDD', 'SATA SSD'
         )
         Enterprise = @(
             '2.5-inch SAS HDD', '2.5-inch SAS SSD', '3.5-inch SAS HDD',
