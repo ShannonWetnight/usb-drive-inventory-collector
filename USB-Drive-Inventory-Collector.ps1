@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.3"
+$ScriptVersion = "3.6.4"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1999,17 +1999,17 @@ function Invoke-ManualEntry {
         Write-Host ''
         if ($null -eq $NextMode -and $Inventory.Count -gt 0) {
             while ($true) {
-                $NextMode = Read-Host 'New drive [N], copy last saved drive [C], or return [R]'
+                $NextMode = Read-Host 'New drive [N], copy last saved drive [L], or return [R]'
                 if ($null -eq $NextMode) { return }
                 $NextMode = $NextMode.Trim()
                 if ($NextMode -eq 'R') { return }
-                if ($NextMode -eq 'N' -or $NextMode -eq 'C') { break }
-                Write-Host 'Choose N, C, or R.'
+                if ($NextMode -eq 'N' -or $NextMode -eq 'L') { break }
+                Write-Host 'Choose N, L, or R.'
             }
         }
         if ($null -eq $NextMode) { $NextMode = 'N' }
 
-        if ($NextMode -eq 'C') {
+        if ($NextMode -eq 'L') {
             $Source = $Inventory[$Inventory.Count - 1]
             $Record = [PSCustomObject]@{
                 Make = $Source.Make; Model = $Source.Model; SerialNumber = $null
@@ -2023,11 +2023,11 @@ function Invoke-ManualEntry {
         }
         $Fields = @('Make', 'Model', 'SerialNumber', 'Capacity', 'Type')
         $FieldLabels = @('Make', 'Model', 'Serial number', 'Capacity', 'Drive type')
-        $FirstField = if ($NextMode -eq 'C') { 3 } else { 1 }
-        $LastField = if ($NextMode -eq 'C') { 3 } else { 5 }
+        $FirstField = if ($NextMode -eq 'L') { 3 } else { 1 }
+        $LastField = if ($NextMode -eq 'L') { 3 } else { 5 }
         for ($Index = $FirstField; $Index -le $LastField; $Index++) {
             Clear-Host
-            if ($NextMode -eq 'C') {
+            if ($NextMode -eq 'L') {
                 Write-Host 'Step 1 of 1 - Serial number'
                 Write-Host 'Copying the last saved drive. Enter a new serial number.'
             }
@@ -2152,13 +2152,13 @@ function Invoke-ManualEntry {
         }
 
         while ($true) {
-            $Next = Read-Host 'Add another manual drive [A], copy this drive with a new serial [C], or return [R]'
+            $Next = Read-Host 'Add another manual drive [A], copy this drive with a new serial [L], or return [R]'
             if ($null -eq $Next) { return }
             $Next = $Next.Trim()
             if ($Next -eq 'A') { $NextMode = 'N'; break }
-            if ($Next -eq 'C') { $NextMode = 'C'; break }
+            if ($Next -eq 'L') { $NextMode = 'L'; break }
             if ($Next -eq 'R') { return }
-            Write-Host 'Choose A, C, or R.'
+            Write-Host 'Choose A, L, or R.'
         }
     }
 }
