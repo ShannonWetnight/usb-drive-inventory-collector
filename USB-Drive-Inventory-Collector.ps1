@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.4"
+$ScriptVersion = "3.6.5"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1991,6 +1991,7 @@ function Show-ManualRecord {
 function Invoke-ManualEntry {
     Write-Log -Level INFO -Message 'Manual drive recording opened.'
     $NextMode = $null
+    $SavedRow = $null
 
     while ($true) {
         Clear-Host
@@ -2030,6 +2031,7 @@ function Invoke-ManualEntry {
             if ($NextMode -eq 'L') {
                 Write-Host 'Step 1 of 1 - Serial number'
                 Write-Host 'Copying the last saved drive. Enter a new serial number.'
+                if ($null -ne $SavedRow) { Write-Host "Previous drive saved as row $SavedRow." }
             }
             else {
                 Write-Host "Step $Index of 5 - $($FieldLabels[$Index - 1])"
@@ -2048,43 +2050,18 @@ function Invoke-ManualEntry {
             Show-ManualRecord -Record $Record
             $Duplicate = $Record.SerialNumber -ne 'N/A' -and $KnownSerials.ContainsKey($Record.SerialNumber)
             if ($Duplicate) {
-                Write-Host 'This serial number is already in the workbook. Edit it, copy the last saved drive, or cancel.'
+                Write-Host 'This serial number is already in the workbook. Edit it or cancel; this record cannot be saved twice.'
             }
             elseif ($Record.SerialNumber -eq 'N/A') {
                 Write-Host 'Serial N/A cannot be checked for duplicates.'
             }
 
-            $ReviewPrompt = if ($Inventory.Count -gt 0) {
-                'Save [Y], edit a field [E], copy last saved drive [L], or cancel [C]'
-            }
-            else {
-                'Save [Y], edit a field [E], or cancel [C]'
-            }
-            $Action = Read-Host $ReviewPrompt
+            $Action = Read-Host 'Save [Y], save and copy for next serial [L], edit [E], or cancel [C]'
             if ($null -eq $Action) { return }
             $Action = $Action.Trim()
             if ($Action -eq 'C') {
                 Write-Log -Level INFO -Message 'Manual entry cancelled at review.'
                 return
-            }
-            if ($Action -eq 'L' -and $Inventory.Count -gt 0) {
-                Clear-Host
-                Write-Host 'COPY LAST SAVED DRIVE - NEW SERIAL'
-                Write-Host ':back or :cancel returns to the current review without changing it.'
-                Write-Host ''
-                $NewSerial = Read-ManualField -Field 3 -AllowBack
-                if ($null -eq $NewSerial) { return }
-                if ($NewSerial -eq ':back') {
-                    Clear-Host
-                    continue ReviewLoop
-                }
-                $Source = $Inventory[$Inventory.Count - 1]
-                $Record = [PSCustomObject]@{
-                    Make = $Source.Make; Model = $Source.Model; SerialNumber = $NewSerial
-                    Capacity = $Source.Capacity; Type = $Source.Type
-                }
-                Clear-Host
-                continue ReviewLoop
             }
             if ($Action -eq 'E') {
                 $FieldNumber = 0
@@ -2111,7 +2088,7 @@ function Invoke-ManualEntry {
                 Clear-Host
                 continue ReviewLoop
             }
-            if ($Action -ne 'Y') {
+            if ($Action -ne 'Y' -and $Action -ne 'L') {
                 Clear-Host
                 continue ReviewLoop
             }
@@ -2120,6 +2097,7 @@ function Invoke-ManualEntry {
                 continue ReviewLoop
             }
 
+            $SaveAndCopy = $Action -eq 'L'
             [void]$Inventory.Add($Record)
             try {
                 Write-XlsxInventory -Path $OutputPath -Records $Inventory
@@ -2133,6 +2111,7 @@ function Invoke-ManualEntry {
             }
 
             if ($Record.SerialNumber -ne 'N/A') { $KnownSerials[$Record.SerialNumber] = $true }
+            $SavedRow = $Inventory.Count + 1
             Clear-Host
             Write-Host 'MANUAL DRIVE RECORDED'
             Write-Host '---------------------'
@@ -2142,13 +2121,18 @@ function Invoke-ManualEntry {
             Write-Host "Capacity: $($Record.Capacity)"
             Write-Host "Type:     $($Record.Type)"
             Write-Host ''
-            Write-Host "Saved as row $($Inventory.Count + 1)."
+            Write-Host "Saved as row $SavedRow."
             Write-Host ''
             Write-Log -Level INFO -Message (
                 "Manual drive recorded: row={0}, make='{1}', model='{2}', serial='{3}', capacity='{4}', type='{5}'" -f
                 ($Inventory.Count + 1), $Record.Make, $Record.Model, $Record.SerialNumber, $Record.Capacity, $Record.Type
             )
             break
+        }
+
+        if ($SaveAndCopy) {
+            $NextMode = 'L'
+            continue
         }
 
         while ($true) {
