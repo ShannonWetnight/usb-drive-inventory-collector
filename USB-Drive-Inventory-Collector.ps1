@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.5.5"
+$ScriptVersion = "3.6.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
