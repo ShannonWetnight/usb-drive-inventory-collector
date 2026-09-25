@@ -84,7 +84,7 @@ Type can be reported as values such as:
 
 The collector only reports a specific form factor when the drive or adapter exposes enough information to support it. An NVMe drive, for example, is reported as `NVMe SSD` rather than assumed to be M.2 when its physical form factor is unavailable.
 
-Manual entry offers these types plus SAS SSDs and HDDs, USB flash drives, SD and microSD cards, CompactFlash cards, eMMC, 3.5-inch and 5.25-inch floppy disks, and a custom **Other** choice. The added options are for manual records; they do not change what smartctl can identify automatically.
+Manual entry offers these types plus 2.5-inch and 3.5-inch IDE HDDs, generic IDE drives, IDE HDDs and SSDs, SAS SSDs and HDDs, USB flash drives, SD and microSD cards, CompactFlash cards, eMMC, 3.5-inch and 5.25-inch floppy disks, and a custom **Other** choice. The added options are for manual records; they do not change what smartctl can identify automatically.
 
 ## Supported USB Adapters
 
