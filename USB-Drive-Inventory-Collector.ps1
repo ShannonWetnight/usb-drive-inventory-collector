@@ -81,7 +81,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.7.0"
+$ScriptVersion = "4.0.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -261,6 +261,7 @@ function Show-ConsoleHeading {
 }
 
 function Ensure-SmartctlDependency {
+    param ([scriptblock]$ConfirmInstall)
 
     $Existing = Find-SmartctlExecutable
 
@@ -285,7 +286,10 @@ function Ensure-SmartctlDependency {
         throw "smartctl is missing and WinGet is not available for automatic installation. Install smartmontools manually, then rerun the script."
     }
 
-    $Response = Read-Host "Install smartmontools now using WinGet? [Y/N]"
+    $Response = if ($null -ne $ConfirmInstall) {
+        if (& $ConfirmInstall) { 'Y' } else { 'N' }
+    }
+    else { Read-Host "Install smartmontools now using WinGet? [Y/N]" }
 
     if ($Response -notmatch '(?i)^y(?:es)?$') {
         throw "smartctl is required. Installation was declined."
@@ -1800,6 +1804,7 @@ $AutoPlayRegistryPath = 'Software\Microsoft\Windows\CurrentVersion\Explorer\Auto
 $AutoPlayRestore = $null
 
 function Set-TemporaryAutoPlayPreference {
+    param ([scriptblock]$AskDisable)
     $DesktopSid = $null
     if ($InteractiveUser -ne 'N/A') {
         try {
@@ -1840,9 +1845,14 @@ function Set-TemporaryAutoPlayPreference {
             $OriginalValue = $null
         }
 
-        do {
-            $Choice = (Read-Host 'AutoPlay can open drive folders or show pop-ups. Disable it while collecting? [Y/N]').Trim()
-        } while ($Choice -notin @('Y', 'N'))
+        if ($null -ne $AskDisable) {
+            $Choice = if (& $AskDisable) { 'Y' } else { 'N' }
+        }
+        else {
+            do {
+                $Choice = (Read-Host 'AutoPlay can open drive folders or show pop-ups. Disable it while collecting? [Y/N]').Trim()
+            } while ($Choice -notin @('Y', 'N'))
+        }
 
         if ($Choice -eq 'N') {
             Write-Log -Level INFO -Message 'User declined temporary AutoPlay change.'
@@ -1977,10 +1987,8 @@ function Read-ManualSelection {
     }
 }
 
-function Read-ManualDriveType {
-    param ([switch]$AllowBack)
-
-    $Groups = [ordered]@{
+function Get-ManualDriveTypeGroups {
+    return [ordered]@{
         Standard = @(
             '1.8-inch SATA SSD', '2.5-inch IDE HDD', '2.5-inch SATA HDD',
             '2.5-inch SATA SSD', '3.5-inch IDE HDD', '3.5-inch SATA HDD',
@@ -1998,6 +2006,12 @@ function Read-ManualDriveType {
             'SD Card', 'SSD', 'USB Flash Drive', 'Other'
         )
     }
+}
+
+function Read-ManualDriveType {
+    param ([switch]$AllowBack)
+
+    $Groups = Get-ManualDriveTypeGroups
 
     $Options = @()
     Write-Host ''
