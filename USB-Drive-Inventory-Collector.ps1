@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.6.1"
+$ScriptVersion = "3.6.2"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1601,9 +1601,7 @@ $Inventory = [System.Collections.ArrayList]::new()
 $KnownSerials = @{}
 
 if (Test-Path -LiteralPath $OutputPath) {
-    Write-Host "Opening existing inventory:"
-    Write-Host "  $OutputPath"
-    Write-Host ""
+    Write-Host 'Opening existing inventory...'
 
     foreach ($Record in @(Read-XlsxInventory -Path $OutputPath)) {
         [void]$Inventory.Add($Record)
@@ -1621,31 +1619,54 @@ if (Test-Path -LiteralPath $OutputPath) {
     )
 }
 else {
-    Write-Host "Creating inventory:"
-    Write-Host "  $OutputPath"
-    Write-Host ""
+    Write-Host 'Creating inventory...'
 
     Write-XlsxInventory -Path $OutputPath -Records $Inventory
     Write-Log -Level INFO -Message "New inventory workbook created."
 }
 
 
-Write-Host "USB Drive Inventory Collector v$ScriptVersion"
-Write-Host "---------------------------------------"
-Write-Host ""
-Write-Host "Scope:     USB physical drives (boot/system disks excluded)"
-Write-Host "Adapters:  smartctl autodetection + NVMe/SATA USB transport fallbacks"
-Write-Host "Output:    $OutputPath"
-Write-Host "Log:       $LogPath"
-Write-Host "Backend:   Direct XLSX (no Excel COM)"
-Write-Host "smartctl:  $SmartctlVersion"
-Write-Host ""
-Write-Host "Insert one drive at a time."
-Write-Host "The workbook is saved after every drive."
-Write-Host "Do not keep the workbook open in Excel while collecting drives."
-Write-Host "Press M to add a manual drive record while waiting."
-Write-Host "Press Ctrl+C when finished."
-Write-Host ""
+function Show-CollectorHeader {
+    Write-Host "USB Drive Inventory Collector v$ScriptVersion"
+    Write-Host 'Maintainer: Shannon Wetnight'
+    Write-Host ''
+}
+
+function Show-CollectorWaitingScreen {
+    Clear-Host
+    Show-CollectorHeader
+    Write-Host 'Insert one drive at a time. The workbook is saved after every drive.'
+    Write-Host 'Keep the workbook closed in Excel while collecting.'
+    Write-Host ''
+    Write-Host 'Waiting for a USB drive. Press M for manual entry or D for technical details.'
+    Write-Host 'Press Ctrl+C when finished.'
+    Write-Host ''
+}
+
+function Show-CollectorTechnicalDetails {
+    Clear-Host
+    Show-CollectorHeader
+    Write-Host 'TECHNICAL DETAILS'
+    Write-Host '-----------------'
+    Write-Host 'Scope:     USB physical drives (boot and system disks excluded)'
+    Write-Host 'Adapters:  smartctl auto-detection with NVMe/SATA USB transport fallbacks'
+    Write-Host "Output:    $OutputPath"
+    Write-Host "Log:       $LogPath"
+    Write-Host 'Backend:   Direct XLSX (no Excel COM)'
+    Write-Host "smartctl:  $SmartctlVersion"
+    Write-Host "Timeout:   $SmartctlTimeoutSeconds seconds per smartctl process"
+    Write-Host ''
+    Write-Host 'Press D to hide details or M for manual entry. Press Ctrl+C to stop.'
+    Write-Host ''
+}
+
+Clear-Host
+Show-CollectorHeader
+Write-Host 'Insert one drive at a time. The workbook is saved after every drive.'
+Write-Host 'Keep the workbook closed in Excel while collecting.'
+Write-Host 'Press M for manual entry or D for technical details while waiting.'
+Write-Host 'Press Ctrl+C when finished.'
+Write-Host ''
 
 # Tracks only USB disks that are currently attached. A removed disk disappears
 # from this table; a later insertion on the same Windows disk number is new.
@@ -2114,23 +2135,25 @@ function Invoke-ManualEntry {
     }
 }
 
-function Test-ManualEntryHotkey {
-    if ($script:ManualHotkeyUnavailable) { return $false }
+function Read-CollectorHotkey {
+    if ($script:ConsoleHotkeysUnavailable) { return $null }
     try {
         while ([Console]::KeyAvailable) {
             $Key = [Console]::ReadKey($true)
-            if ($Key.Key -eq [ConsoleKey]::M -and $Key.Modifiers -eq 0) { return $true }
+            if ($Key.Modifiers -ne 0) { continue }
+            if ($Key.Key -eq [ConsoleKey]::M) { return 'M' }
+            if ($Key.Key -eq [ConsoleKey]::D) { return 'D' }
         }
     }
     catch {
-        $script:ManualHotkeyUnavailable = $true
-        if (-not $script:ManualHotkeyWarningShown) {
-            $script:ManualHotkeyWarningShown = $true
-            Write-Log -Level WARN -Message 'This PowerShell host does not support the M hotkey. Use -ManualEntryOnStartup.'
-            Write-Host 'Manual hotkey unavailable in this host. Restart with -ManualEntryOnStartup if needed.'
+        $script:ConsoleHotkeysUnavailable = $true
+        if (-not $script:ConsoleHotkeyWarningShown) {
+            $script:ConsoleHotkeyWarningShown = $true
+            Write-Log -Level WARN -Message 'This PowerShell host does not support console hotkeys. Use -ManualEntryOnStartup for manual entry.'
+            Write-Host 'Console hotkeys unavailable in this host. Restart with -ManualEntryOnStartup for manual entry.'
         }
     }
-    return $false
+    return $null
 }
 
 # Suppress critical device/read error dialogs generated by this PowerShell
@@ -2168,21 +2191,27 @@ try {
         Write-Host 'AutoPlay setting could not be changed. Continuing with the collector.'
     }
 
+    $script:TechnicalDetailsVisible = $false
     if ($ManualEntryOnStartup) {
         Invoke-ManualEntry
-        Clear-Host
+        Show-CollectorWaitingScreen
+    }
+    else {
+        Write-Host 'Waiting for a USB drive...'
+        Write-Host ''
     }
 
-    Write-Host 'Ready for a USB drive. Insert one to begin, or press M for manual entry.'
-    Write-Host 'Waiting for a drive...'
-    Write-Host ''
-
     while ($true) {
-        if (Test-ManualEntryHotkey) {
+        $Hotkey = Read-CollectorHotkey
+        if ($Hotkey -eq 'M') {
             Invoke-ManualEntry
-            Clear-Host
-            Write-Host 'Returning to automatic recording. Insert a USB drive or press M for manual entry.'
-            Write-Host ''
+            $script:TechnicalDetailsVisible = $false
+            Show-CollectorWaitingScreen
+        }
+        elseif ($Hotkey -eq 'D') {
+            if ($script:TechnicalDetailsVisible) { Show-CollectorWaitingScreen }
+            else { Show-CollectorTechnicalDetails }
+            $script:TechnicalDetailsVisible = -not $script:TechnicalDetailsVisible
         }
         $CurrentDisks = Get-TargetUsbDisks
         $CurrentNumbers = @{}
@@ -2199,6 +2228,7 @@ try {
             # Retry only after Windows reports a removal and a new insertion.
             $ConnectedDisks[$DiskNumber] = $true
 
+            $script:TechnicalDetailsVisible = $false
             Clear-Host
             Write-Host "USB drive detected on Disk $DiskNumber."
             Write-Host "Reading drive identity..."
