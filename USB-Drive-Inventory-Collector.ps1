@@ -77,7 +77,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptVersion = "3.5.2"
+$ScriptVersion = "3.5.3"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
 
@@ -1787,11 +1787,13 @@ function Restore-AutoPlayPreference {
 }
 
 function Read-ManualText {
-    param ([string]$Label, [string]$Pattern, [int]$MaxLength, [switch]$Uppercase)
+    param ([string]$Label, [string]$Pattern, [int]$MaxLength, [switch]$Uppercase, [switch]$AllowBack)
 
     while ($true) {
-        $Answer = Read-Host "$Label (Enter for N/A, or :cancel)"
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Answer = Read-Host "$Label ($Hint)"
         if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        if ($AllowBack -and $Answer.Trim() -eq ':back') { return ':back' }
         if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Answer = $Answer.Trim()
         if ($Answer.Length -gt $MaxLength -or $Answer -cnotmatch $Pattern) {
@@ -1804,15 +1806,17 @@ function Read-ManualText {
 }
 
 function Read-ManualSelection {
-    param ([string]$Label, [string[]]$Options)
+    param ([string]$Label, [string[]]$Options, [switch]$AllowBack)
 
     Write-Host "${Label}:"
     for ($Index = 0; $Index -lt $Options.Count; $Index++) {
         Write-Host ("  {0}. {1}" -f ($Index + 1), $Options[$Index])
     }
     while ($true) {
-        $Answer = Read-Host 'Choose a number (Enter for N/A, or :cancel)'
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Answer = Read-Host "Choose a number ($Hint)"
         if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        if ($AllowBack -and $Answer.Trim() -eq ':back') { return ':back' }
         if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Number = 0
         if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
@@ -1823,6 +1827,8 @@ function Read-ManualSelection {
 }
 
 function Read-ManualDriveType {
+    param ([switch]$AllowBack)
+
     $Groups = [ordered]@{
         Standard = @(
             '1.8-inch SATA SSD', '2.5-inch SATA HDD', '2.5-inch SATA SSD',
@@ -1850,8 +1856,10 @@ function Read-ManualDriveType {
         }
     }
     while ($true) {
-        $Answer = Read-Host 'Choose a number (Enter for N/A, or :cancel)'
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Answer = Read-Host "Choose a number ($Hint)"
         if ($null -eq $Answer -or $Answer.Trim() -eq ':cancel') { return $null }
+        if ($AllowBack -and $Answer.Trim() -eq ':back') { return ':back' }
         if ([string]::IsNullOrWhiteSpace($Answer)) { return 'N/A' }
         $Number = 0
         if ([int]::TryParse($Answer.Trim(), [ref]$Number) -and $Number -ge 1 -and $Number -le $Options.Count) {
@@ -1862,14 +1870,17 @@ function Read-ManualDriveType {
 }
 
 function Read-ManualCapacity {
-    Write-Host 'Enter the number only. Select the capacity unit next.'
+    param ([switch]$AllowBack)
+
     while ($true) {
-        $Amount = Read-Host 'Capacity (number only; Enter for N/A, or :cancel)'
+        $Hint = if ($AllowBack) { 'Enter for N/A, :back to review, or :cancel' } else { 'Enter for N/A, or :cancel' }
+        $Amount = Read-Host "Capacity (number only; $Hint)"
         if ($null -eq $Amount -or $Amount.Trim() -eq ':cancel') { return $null }
+        if ($AllowBack -and $Amount.Trim() -eq ':back') { return ':back' }
         if ([string]::IsNullOrWhiteSpace($Amount)) { return 'N/A' }
         $Amount = $Amount.Trim()
-        if ($Amount.Length -gt 19 -or $Amount -cnotmatch '\A[0-9]{1,15}(?:\.[0-9]{1,3})?\z') {
-            Write-Host 'Enter a positive number without a unit, such as 1 or 1.5.'
+        if ($Amount.Length -gt 22 -or $Amount -cnotmatch '\A[0-9]{1,15}(?:\.[0-9]{1,6})?\z') {
+            Write-Host 'Enter a positive number without a unit, such as 1 or 0.005.'
             continue
         }
         $Number = [decimal]::Parse($Amount, [Globalization.CultureInfo]::InvariantCulture)
@@ -1877,36 +1888,53 @@ function Read-ManualCapacity {
         Write-Host 'Capacity must be greater than zero.'
     }
 
+    Clear-Host
+    if ($AllowBack) { Write-Host 'EDIT CAPACITY - UNIT' }
+    else { Write-Host 'Step 4 of 5 - Capacity unit' }
+    Write-Host "Capacity amount: $Amount"
+    Write-Host ''
     while ($true) {
-        $Unit = Read-ManualSelection -Label 'Capacity unit' -Options @('B', 'KB', 'MB', 'GB', 'TB', 'PB', 'Other')
+        $Unit = Read-ManualSelection -Label 'Capacity unit' -Options @('B', 'KB', 'MB', 'GB', 'TB', 'PB', 'Other') -AllowBack:$AllowBack
         if ($null -eq $Unit) { return $null }
+        if ($Unit -eq ':back') { return ':back' }
         if ($Unit -eq 'N/A') { return 'N/A' }
         if ($Unit -eq 'Other') {
+            Clear-Host
+            if ($AllowBack) { Write-Host 'EDIT CAPACITY - CUSTOM UNIT' }
+            else { Write-Host 'Step 4 of 5 - Custom capacity unit' }
+            Write-Host "Capacity amount: $Amount"
+            Write-Host ''
             $Unit = Read-ManualText -Label 'Custom capacity unit (letters only)' `
-                -Pattern '\A[A-Za-z]{1,12}\z' -MaxLength 12
+                -Pattern '\A[A-Za-z]{1,12}\z' -MaxLength 12 -AllowBack:$AllowBack
             if ($null -eq $Unit) { return $null }
+            if ($Unit -eq ':back') { return ':back' }
+            if ($Unit -eq 'N/A') { return 'N/A' }
         }
         if ($Unit -ne 'B' -or $Number -eq [decimal]::Truncate($Number)) { break }
         Write-Host 'Bytes must be a whole number. Choose another unit or edit the amount later.'
     }
 
-    return ('{0} {1}' -f $Number.ToString('0.###', [Globalization.CultureInfo]::InvariantCulture), $Unit)
+    return ('{0} {1}' -f $Number.ToString('0.######', [Globalization.CultureInfo]::InvariantCulture), $Unit)
 }
 
 function Read-ManualField {
-    param ([ValidateRange(1, 5)][int]$Field)
+    param ([ValidateRange(1, 5)][int]$Field, [switch]$AllowBack)
 
     switch ($Field) {
-        1 { return (Read-ManualText -Label 'Make' -Pattern "\A[A-Za-z0-9][A-Za-z0-9 .&()+'/_-]{0,79}\z" -MaxLength 80) }
-        2 { return (Read-ManualText -Label 'Model' -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .+/_-]{0,99}\z' -MaxLength 100 -Uppercase) }
-        3 { return (Read-ManualText -Label 'Serial number' -Pattern '\A[A-Za-z0-9][A-Za-z0-9./_-]{0,99}\z' -MaxLength 100 -Uppercase) }
-        4 { return (Read-ManualCapacity) }
+        1 { return (Read-ManualText -Label 'Make' -Pattern "\A[A-Za-z0-9][A-Za-z0-9 .&()+'/_-]{0,79}\z" -MaxLength 80 -AllowBack:$AllowBack) }
+        2 { return (Read-ManualText -Label 'Model' -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .+/_-]{0,99}\z' -MaxLength 100 -Uppercase -AllowBack:$AllowBack) }
+        3 { return (Read-ManualText -Label 'Serial number' -Pattern '\A[A-Za-z0-9][A-Za-z0-9./_-]{0,99}\z' -MaxLength 100 -Uppercase -AllowBack:$AllowBack) }
+        4 { return (Read-ManualCapacity -AllowBack:$AllowBack) }
         5 {
-            $Type = Read-ManualDriveType
+            $Type = Read-ManualDriveType -AllowBack:$AllowBack
             if ($null -eq $Type) { return $null }
+            if ($Type -eq ':back') { return ':back' }
             if ($Type -eq 'Other') {
+                Clear-Host
+                if ($AllowBack) { Write-Host 'EDIT DRIVE TYPE - CUSTOM' }
+                else { Write-Host 'Step 5 of 5 - Custom drive type' }
                 return (Read-ManualText -Label 'Custom drive type' `
-                    -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .()+/_-]{0,59}\z' -MaxLength 60)
+                    -Pattern '\A[A-Za-z0-9][A-Za-z0-9 .()+/_-]{0,59}\z' -MaxLength 60 -AllowBack:$AllowBack)
             }
             return $Type
         }
@@ -1929,17 +1957,51 @@ function Show-ManualRecord {
 
 function Invoke-ManualEntry {
     Write-Log -Level INFO -Message 'Manual drive recording opened.'
+    $NextMode = $null
 
     while ($true) {
         Clear-Host
         Write-Host 'Manual drive recording initialized...'
         Write-Host 'Press Enter to record N/A for a field, or type :cancel to return to automatic recording.'
         Write-Host ''
-        $Record = [PSCustomObject]@{
-            Make = $null; Model = $null; SerialNumber = $null; Capacity = $null; Type = $null
+        if ($null -eq $NextMode -and $Inventory.Count -gt 0) {
+            while ($true) {
+                $NextMode = Read-Host 'New drive [N], copy last saved drive [C], or return [R]'
+                if ($null -eq $NextMode) { return }
+                $NextMode = $NextMode.Trim()
+                if ($NextMode -eq 'R') { return }
+                if ($NextMode -eq 'N' -or $NextMode -eq 'C') { break }
+                Write-Host 'Choose N, C, or R.'
+            }
+        }
+        if ($null -eq $NextMode) { $NextMode = 'N' }
+
+        if ($NextMode -eq 'C') {
+            $Source = $Inventory[$Inventory.Count - 1]
+            $Record = [PSCustomObject]@{
+                Make = $Source.Make; Model = $Source.Model; SerialNumber = $null
+                Capacity = $Source.Capacity; Type = $Source.Type
+            }
+        }
+        else {
+            $Record = [PSCustomObject]@{
+                Make = $null; Model = $null; SerialNumber = $null; Capacity = $null; Type = $null
+            }
         }
         $Fields = @('Make', 'Model', 'SerialNumber', 'Capacity', 'Type')
-        for ($Index = 1; $Index -le 5; $Index++) {
+        $FieldLabels = @('Make', 'Model', 'Serial number', 'Capacity', 'Drive type')
+        $FirstField = if ($NextMode -eq 'C') { 3 } else { 1 }
+        $LastField = if ($NextMode -eq 'C') { 3 } else { 5 }
+        for ($Index = $FirstField; $Index -le $LastField; $Index++) {
+            Clear-Host
+            if ($NextMode -eq 'C') {
+                Write-Host 'Step 1 of 1 - Serial number'
+                Write-Host 'Copying the last saved drive. Enter a new serial number.'
+            }
+            else {
+                Write-Host "Step $Index of 5 - $($FieldLabels[$Index - 1])"
+            }
+            Write-Host ''
             $Value = Read-ManualField -Field $Index
             if ($null -eq $Value) {
                 Write-Log -Level INFO -Message 'Manual entry cancelled before saving.'
@@ -1968,14 +2030,25 @@ function Invoke-ManualEntry {
             }
             if ($Action -eq 'E') {
                 $FieldNumber = 0
-                $Choice = Read-Host 'Field to edit [1-5] (or :cancel)'
+                $Choice = Read-Host 'Field to edit [1-5], :back to review, or :cancel to leave'
                 if ($null -eq $Choice -or $Choice.Trim() -eq ':cancel') { return }
+                if ($Choice.Trim() -eq ':back') {
+                    Clear-Host
+                    continue
+                }
                 if (-not [int]::TryParse($Choice.Trim(), [ref]$FieldNumber) -or $FieldNumber -lt 1 -or $FieldNumber -gt 5) {
                     Write-Host 'Choose a field number from 1 to 5.'
                     continue
                 }
-                $Value = Read-ManualField -Field $FieldNumber
+                Clear-Host
+                Write-Host "EDIT FIELD $FieldNumber (type :back to keep the current value)"
+                Write-Host ''
+                $Value = Read-ManualField -Field $FieldNumber -AllowBack
                 if ($null -eq $Value) { return }
+                if ($Value -eq ':back') {
+                    Clear-Host
+                    continue
+                }
                 $Record.($Fields[$FieldNumber - 1]) = $Value
                 Clear-Host
                 continue
@@ -2018,12 +2091,13 @@ function Invoke-ManualEntry {
         }
 
         while ($true) {
-            $Next = Read-Host 'Add another manual drive [A] or return to automatic recording [R]'
+            $Next = Read-Host 'Add another manual drive [A], copy this drive with a new serial [C], or return [R]'
             if ($null -eq $Next) { return }
             $Next = $Next.Trim()
-            if ($Next -eq 'A') { break }
+            if ($Next -eq 'A') { $NextMode = 'N'; break }
+            if ($Next -eq 'C') { $NextMode = 'C'; break }
             if ($Next -eq 'R') { return }
-            Write-Host 'Choose A or R.'
+            Write-Host 'Choose A, C, or R.'
         }
     }
 }
