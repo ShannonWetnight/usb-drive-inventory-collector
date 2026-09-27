@@ -16,7 +16,7 @@ foreach ($Assembly in @('System.IO.Compression','System.IO.Compression.FileSyste
 $LauncherPath = Join-Path $Root 'Launch USB Drive Inventory Collector.vbs'
 if (-not (Test-Path -LiteralPath $LauncherPath)) { throw 'Double-click launcher is missing.' }
 $LauncherSource = Get-Content -LiteralPath $LauncherPath -Raw
-if ($LauncherSource -notmatch 'ShellExecute .*"runas"') { throw 'Launcher does not request elevation.' }
+if ($LauncherSource -notmatch '(?s)ShellExecute .*"runas"') { throw 'Launcher does not request elevation.' }
 if ($LauncherSource -notmatch '(?s)ShellExecute .*"runas".*,\s*1\s*$') {
     throw 'Launcher must show the elevated PowerShell process normally.'
 }
