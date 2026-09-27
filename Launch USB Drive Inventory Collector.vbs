@@ -13,7 +13,7 @@ If Not fso.FileExists(scriptPath) Then
     WScript.Quit 1
 End If
 
-command = "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -STA -File " & _
+command = "powershell.exe -NoLogo -NoProfile -STA -File " & _
     Chr(34) & scriptPath & Chr(34)
 shellApp.ShellExecute "powershell.exe", Mid(command, Len("powershell.exe") + 2), _
-    fso.GetParentFolderName(scriptPath), "runas", 0
+    fso.GetParentFolderName(scriptPath), "runas", 1
