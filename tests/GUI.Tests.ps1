@@ -7,6 +7,16 @@ $ConsoleAst = [Management.Automation.Language.Parser]::ParseFile($ConsolePath,[r
 if ($Errors.Count) { throw ($Errors | Out-String) }
 $GuiAst = [Management.Automation.Language.Parser]::ParseFile($GuiPath,[ref]$Tokens,[ref]$Errors)
 if ($Errors.Count) { throw ($Errors | Out-String) }
+$GuiSource = Get-Content -LiteralPath $GuiPath -Raw
+foreach ($Assembly in @('System.IO.Compression','System.IO.Compression.FileSystem')) {
+    if ($GuiSource -notmatch "(?m)^Add-Type -AssemblyName $([regex]::Escape($Assembly))\s*$") {
+        throw "GUI startup does not load required assembly $Assembly."
+    }
+}
+$LauncherPath = Join-Path $Root 'Launch USB Drive Inventory Collector.vbs'
+if (-not (Test-Path -LiteralPath $LauncherPath)) { throw 'Double-click launcher is missing.' }
+$LauncherSource = Get-Content -LiteralPath $LauncherPath -Raw
+if ($LauncherSource -notmatch 'ShellExecute .*"runas"') { throw 'Launcher does not request elevation.' }
 $ConsoleFunctions = @($ConsoleAst.FindAll({ param($Node) $Node -is [Management.Automation.Language.FunctionDefinitionAst] },$false))
 foreach ($Function in $ConsoleFunctions) { Invoke-Expression $Function.Extent.Text }
 $GuiFunctions = @($GuiAst.FindAll({ param($Node) $Node -is [Management.Automation.Language.FunctionDefinitionAst] },$false))
