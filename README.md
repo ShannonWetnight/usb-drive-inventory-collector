@@ -176,7 +176,7 @@ The GUI uses the drive classification, smartctl transport fallbacks, direct XLSX
 
 ### Microsoft Defender reports
 
-A user reported Microsoft Defender identifying the GitHub source ZIP as `Trojan:Script/Wacatac.C!ml` on September 27, 2026. This heuristic detection has not been adjudicated by Microsoft, so do not restore a quarantined copy or create a Defender exclusion based on this README. Submit the archive to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission) and wait for its determination. The launcher was simplified to remove hidden PowerShell startup and execution-policy overrides, but the updated archive still needs to be checked by Defender.
+Microsoft Defender has flagged the GitHub source ZIP twice, as `Trojan:Script/Wacatac.C!ml` and `Trojan:Script/Wacatac.H!ml`, on September 27, 2026. The latest alert names the `codeload.github.com` archive as the affected file. That does not show which file inside the archive triggered the detection or whether the alert is correct. Do not restore a quarantined copy or add a Defender exclusion. Submit the archive to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission) and wait for its determination.
 
 ### Console workflow
 
