@@ -162,7 +162,9 @@ Output\
 
 ### Windows GUI (v4.0.0)
 
-Launch the GUI from an elevated STA PowerShell window:
+To launch it by double-clicking, open `Launch USB Drive Inventory Collector.vbs`. It requests administrator access through Windows and starts the GUI without leaving a PowerShell console window open. Keep the launcher and both PowerShell scripts together in the same folder.
+
+You can also launch the GUI from an elevated STA PowerShell window:
 
 ```powershell
 powershell.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector-GUI.ps1
