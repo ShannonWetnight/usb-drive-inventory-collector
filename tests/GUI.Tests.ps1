@@ -17,6 +17,9 @@ $LauncherPath = Join-Path $Root 'Launch USB Drive Inventory Collector.vbs'
 if (-not (Test-Path -LiteralPath $LauncherPath)) { throw 'Double-click launcher is missing.' }
 $LauncherSource = Get-Content -LiteralPath $LauncherPath -Raw
 if ($LauncherSource -notmatch 'ShellExecute .*"runas"') { throw 'Launcher does not request elevation.' }
+if ($LauncherSource -notmatch '(?s)ShellExecute .*"runas".*,\s*1\s*$') {
+    throw 'Launcher must show the elevated PowerShell process normally.'
+}
 $ConsoleFunctions = @($ConsoleAst.FindAll({ param($Node) $Node -is [Management.Automation.Language.FunctionDefinitionAst] },$false))
 foreach ($Function in $ConsoleFunctions) { Invoke-Expression $Function.Extent.Text }
 $GuiFunctions = @($GuiAst.FindAll({ param($Node) $Node -is [Management.Automation.Language.FunctionDefinitionAst] },$false))
