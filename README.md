@@ -162,7 +162,7 @@ Output\
 
 ### Windows GUI (v4.0.0)
 
-To launch it by double-clicking, open `Launch USB Drive Inventory Collector.vbs`. It requests administrator access through Windows and starts the GUI without leaving a PowerShell console window open. Keep the launcher and both PowerShell scripts together in the same folder.
+To launch it by double-clicking, open `Launch USB Drive Inventory Collector.vbs`. It requests administrator access through Windows and starts the GUI. A PowerShell console window may also open while the collector is running. Keep the launcher and both PowerShell scripts together in the same folder. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
 
 You can also launch the GUI from an elevated STA PowerShell window:
 
@@ -178,6 +178,10 @@ Use **Pause scanning** to stop new scans; a probe already running will finish. *
 The GUI runs drive probes in a background PowerShell runspace, so slow smartctl calls do not block the controls. Manual entry and setup can be opened during a probe; the result is processed after the dialog closes. The collector handles one newly inserted disk per scan and requires removal before retrying a disk that failed to read.
 
 The GUI uses the drive classification, smartctl transport fallbacks, direct XLSX writer, logging, and AutoPlay restoration functions in the adjacent console script. Keep both files together. Windows Forms adds no Excel dependency or separate GUI package.
+
+### Microsoft Defender reports
+
+A user reported Microsoft Defender identifying the GitHub source ZIP as `Trojan:Script/Wacatac.C!ml` on September 27, 2026. This heuristic detection has not been adjudicated by Microsoft, so do not restore a quarantined copy or create a Defender exclusion based on this README. Submit the archive to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission) and wait for its determination. The launcher was simplified to remove hidden PowerShell startup and execution-policy overrides, but the updated archive still needs to be checked by Defender.
 
 ### Console workflow
 
