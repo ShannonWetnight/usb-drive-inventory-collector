@@ -110,16 +110,11 @@ This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB 
 
 ## Setup
 
-1. Download `USB-Drive-Inventory-Collector.ps1` and `USB-Drive-Inventory-Collector-GUI.ps1` into the same folder.
-2. Open Windows PowerShell as Administrator.
-3. Change to the folder containing the script.
-4. If the local execution policy blocks the script, allow it for the current PowerShell process:
+1. Download the repository and extract it into a folder.
+2. Double-click `Launch USB Drive Inventory Collector.vbs` and approve the administrator prompt. Keep the launcher beside the two PowerShell scripts.
+3. If Windows or your organization's PowerShell policy blocks the script, follow the approved process for running local scripts. The launcher does not change execution policy.
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-```
-
-5. Start the GUI:
+To start from an elevated PowerShell session, run:
 
 ```powershell
 .\USB-Drive-Inventory-Collector-GUI.ps1
