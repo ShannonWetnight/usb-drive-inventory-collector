@@ -1,315 +1,52 @@
 # USB Drive Inventory Collector
-> **AI Workflow Notice**  
-> The script was written through AI prompting, then reviewed and curated by the project maintainer. AI tools also helped with troubleshooting and documentation. Users should review the script and validate it in their own environment before relying on the collected data.
 
-## Table of Contents
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-    + [Dependency Check](#dependency-check)
-- [Operating Details](#operating-details)
-- [Supported USB Adapters](#supported-usb-adapters)
-- [Setup](#setup)
-    + [Stop Windows AutoPlay prompts](#stop-windows-autoplay-prompts)
-- [Output](#output)
-- [Usage](#usage)
-    + [Windows GUI (v4.0.0)](#windows-gui-v400)
-    + [Console workflow](#console-workflow)
-    + [Workbook column setup](#workbook-column-setup)
-    + [Duplicate Serial Numbers](#duplicate-serial-numbers)
-    + [Manual drive entry](#manual-drive-entry)
-    + [Read-only Behavior](#read-only-behavior)
-    + [Logs](#logs)
-    + [Parameters](#parameters)
-- [Limitations](#limitations)
-- [Roadmap](#roadmap)
-- [License](#license)
+USB Drive Inventory Collector records the identity of USB-connected physical drives in an XLSX workbook. It excludes Windows boot and system disks, saves after each drive, and supports manual records when a drive cannot be read. It does not format, erase, or write to the attached drive.
 
-## Overview
-USB Drive Inventory Collector is a Windows PowerShell utility for recording drive identity from USB adapters or manual entry. Version 4.0.0 offers a GUI and a console mode in the same PowerShell script. Both modes write the same local `.xlsx` workbook and create a diagnostic log for each run.
+> **AI workflow notice:** The project was written through AI prompting and reviewed by its maintainer. Validate collected data in your own environment before relying on it.
 
-It is useful anywhere you need a repeatable drive inventory: asset tracking, intake, audits, lab work, recycling preparation, or general hardware records. It does not erase, format, partition, or otherwise modify the attached drive.
+## Choose an interface
 
-## Prerequisites
+- **Native Windows GUI (4.0 preview):** The Windows Forms application in [WindowsApp](WindowsApp/README.md) builds into a double-clickable `USB-Drive-Inventory-Collector.exe`. It does not launch PowerShell and does not require changing PowerShell execution policy. This is an unsigned, unreleased preview; Windows and Microsoft Defender testing is still in progress.
+- **Legacy console collector:** [USB-Drive-Inventory-Collector.ps1](USB-Drive-Inventory-Collector.ps1) remains available for an elevated PowerShell session where script execution is allowed. It is independent of the GUI.
 
-- Windows
-- Windows PowerShell 5.1 or later (an STA session for the GUI)
-- Administrator privileges
-- Windows Storage module (`Get-Disk`)
-- smartmontools / `smartctl`
+The two collectors write the same five default workbook columns: Make, Model, Serial Number, Reported Capacity, and Type. Both can add optional identity columns and write directly to XLSX without Excel.
 
-Microsoft Excel is not required. The workbook is written directly in XLSX/OpenXML format.
+## Native GUI preview
 
-### Dependency Check
+Download the artifact from a successful **Build native Windows GUI** run in [pull request #6](https://github.com/ShannonWetnight/usb-drive-inventory-collector/pull/6), extract it, and double-click `USB-Drive-Inventory-Collector.exe`. Approve Windows' administrator prompt. The EXE is self-contained for Windows x64; automatic drive reads also require smartmontools' `smartctl.exe`. If smartmontools is missing, the application asks before installing it through WinGet.
 
-The collector checks for `smartctl` when it starts.
+Insert one drive at a time. **Recorded drives** shows saved records, **Activity** shows progress and errors, and **Technical details** shows the workbook and log paths. **Manual entry** records a drive by hand; **Copy last** starts a new record with the prior drive's information and asks for a new serial. **Workbook setup** selects optional identity columns and backs up the workbook before changing its layout. **Pause scanning** and **Finish** control the session. The app can offer to disable AutoPlay temporarily for the signed-in desktop user and restore its previous setting on normal exit.
 
-If smartmontools is missing and WinGet is available, it asks before installing anything. The GUI asks in a Windows dialog; the console shows:
+The GUI saves `Output/Inventory.xlsx` and a timestamped log under `Output/Logs/` beside the EXE. Keep the workbook closed while collecting so the app can replace it on each save. This build has not yet been tested on the maintainer's USB adapters or cleared against the reported Defender detection. See [WindowsApp/README.md](WindowsApp/README.md) for the preview build command and validation checklist.
 
-```text
-Install smartmontools now using WinGet? [Y/N]
-```
+## Legacy console
 
-If you approve the prompt, the script installs the `smartmontools.smartmontools` package and locates `smartctl.exe` for the current PowerShell session.
-
-To disable the install prompt and exit when the dependency is missing:
-
-```powershell
-.\USB-Drive-Inventory-Collector.ps1 -NoDependencyInstallPrompt
-```
-
-## Operating Details
-
-By default, each drive is written to `Output\Inventory.xlsx` with five fields:
-
-| Column | Description |
-| --- | --- |
-| Make | Manufacturer inferred from the reported model when it can be identified reliably. Otherwise `N/A`. |
-| Model | Model reported by the underlying drive. |
-| Serial Number | Serial number reported by the underlying drive. |
-| Reported Capacity | Manufacturer-style decimal capacity such as `256 GB`, `512 GB`, or `1 TB`. |
-| Type | Media/interface classification based on information exposed by smartctl. |
-
-Type can be reported as values such as:
-
-- `M.2 NVMe SSD`
-- `NVMe SSD`
-- `M.2 SATA SSD`
-- `mSATA SSD`
-- `2.5-inch SATA SSD`
-- `1.8-inch SATA SSD`
-- `SATA SSD`
-- `2.5-inch SATA HDD`
-- `3.5-inch SATA HDD`
-- `SATA HDD`
-- `SATA Drive`
-- `SSD`
-- `HDD`
-- `N/A`
-
-The collector reports a specific form factor when the drive exposes it or an exact known model identifies it. An NVMe drive is reported as `NVMe SSD` when its physical form factor is unavailable.
-
-ATA does not automatically mean SATA. The collector checks SATA metadata and the original smartctl identity text for explicit PATA transport information. PATA drives can be reported as `PATA Drive`, `PATA HDD`, or `PATA SSD`, with a form factor when known. `WD800AAJB` has a specific fallback to `3.5-inch PATA HDD` when older identify data omits the interface or media details. Other ATA drives without enough evidence are recorded as `ATA Drive`, `ATA HDD`, or `ATA SSD`. IDE and PATA refer to the same interface family. Existing workbook rows are not reclassified automatically.
-
-Manual entry offers these types plus 2.5-inch and 3.5-inch IDE HDDs, generic IDE drives, IDE HDDs and SSDs, SAS SSDs and HDDs, USB flash drives, SD and microSD cards, CompactFlash cards, eMMC, 3.5-inch and 5.25-inch floppy disks, and a custom **Other** choice. The added options are for manual records; they do not change what smartctl can identify automatically.
-
-## Supported USB Adapters
-
-Windows often sees a USB enclosure or bridge instead of the drive behind it. To get the underlying model and serial number, the collector uses smartmontools and tries several read-only transport methods.
-
-Current probing covers:
-
-- standard smartctl autodetection
-- SAT/SATA-to-USB passthrough
-- JMicron NVMe-to-USB passthrough
-- Realtek NVMe-to-USB passthrough
-- ASMedia NVMe-to-USB passthrough
-- common older USB-to-SATA bridge modes supported by smartmontools
-
-This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB bridge behavior varies by chipset and firmware. If an adapter does not expose the drive identity through a transport smartctl understands, the collector will not substitute the adapter's serial number for the drive's. Missing information remains `N/A`, or the read fails with details in the run log.
-
-## Setup
-
-1. Download the repository and extract it into a folder.
-2. Double-click `Launch USB Drive Inventory Collector.cmd`, choose `[G]` for the GUI or `[C]` for the console, and approve the administrator prompt. Press `[Enter]` to choose the GUI by default. Keep the launcher beside the PowerShell script.
-3. If Windows or your organization's PowerShell policy blocks the script, follow the approved process for running local scripts. The launcher does not change execution policy.
-
-To start from an elevated PowerShell session, run:
+On Windows, open an elevated PowerShell session in the repository directory and run:
 
 ```powershell
 .\USB-Drive-Inventory-Collector.ps1
 ```
 
-For the console workflow, run `USB-Drive-Inventory-Collector.ps1 -Mode CLI`.
+The script needs Windows PowerShell 5.1 or later, administrator access, and smartmontools. It asks before using WinGet if smartmontools is missing. If local policy blocks scripts, use your organization's approved process; the native GUI preview is the double-click option.
 
-The `.cmd` file is a double-click entry point. Both modes live in the single `.ps1` file.
+While waiting for a drive, press `[M]` for manual entry, `[S]` for workbook setup, or `[D]` for technical details. Insert one USB drive at a time, wait for the saved row, remove it, and insert the next. Press `[Ctrl+C]` when finished. After a read error, remove and reinsert the drive to retry or enter it manually.
 
-No output folders need to be created manually.
+Manual entry asks for Make, Model, Serial Number, capacity number and unit, and a categorized drive type. Skipped fields become `N/A`; model and serial are capitalized; leading and trailing spaces are removed. Review and edit before saving. Choose to save and continue or save and copy with another serial. Duplicate serials must be changed or canceled. The console also supports optional identity columns, a temporary AutoPlay change, and a timestamped diagnostic log.
 
-### Stop Windows AutoPlay prompts
-
-If AutoPlay is enabled for the signed-in Windows user, the collector asks at startup:
-
-```text
-AutoPlay can open drive folders or show pop-ups. Disable it while collecting? [Y/N]
-```
-
-Choose `Y` to turn off that user's AutoPlay preference for the run. The collector remembers whether the setting existed and what value it held, then restores it when the script exits. Choose `N` to leave it alone. If AutoPlay is already off, there is no prompt. The script compares account SIDs before making the change and skips it if the elevated account is different from the signed-in desktop user.
-
-This preference controls Windows AutoPlay, including the usual open-folder action. A workplace policy can override it, and another application can still open a folder or show its own prompt. The collector also suppresses critical device error dialogs raised by its own process while it runs. If Windows keeps opening folders, check **Settings → Bluetooth & devices → AutoPlay** or ask the workstation administrator about policy.
-
-Restoration runs during normal exit, including `Ctrl+C` and handled errors. If PowerShell is forcibly terminated or the computer loses power, cleanup cannot run; check the AutoPlay setting before the next batch. If the preference changes away from the temporary value during collection, the script leaves that newer value in place instead of overwriting it.
-
-## Output
-
-The default layout is created beside the collector script:
-
-```text
-Launch USB Drive Inventory Collector.cmd
-USB-Drive-Inventory-Collector.ps1
-Output\
-  Inventory.xlsx
-  Logs\
-    USB-Drive-Inventory-Collector-YYYYMMDD-HHMMSS.log
-```
-
-`Output\` is created beside the scripts and contains workbook data and diagnostic logs. Do not include collected output in repository commits.
-
-## Usage
-
-### Windows GUI (v4.0.0)
-
-To launch by double-clicking, open `Launch USB Drive Inventory Collector.cmd`. Select `[G]` or press `[Enter]` for the GUI, `[C]` for the console, or `[Q]` to quit. The launcher requests administrator access through Windows. The selection window closes after launch. In GUI mode, PowerShell stays visible during startup, then its console hides once the GUI opens. Startup errors remain visible in the PowerShell window. Console mode leaves that window open. Keep the launcher beside the collector script. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
-
-You can also launch the GUI from an elevated STA PowerShell window:
+The default output is `Output/Inventory.xlsx` and `Output/Logs/USB-Drive-Inventory-Collector-YYYYMMDD-HHMMSS.log` beside the script. To select a different workbook or open manual entry immediately:
 
 ```powershell
-powershell.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector.ps1
-# Console mode: powershell.exe -NoProfile -File .\USB-Drive-Inventory-Collector.ps1 -Mode CLI
+.\USB-Drive-Inventory-Collector.ps1 -OutputPath "C:\Inventory\Inventory.xlsx" -ManualEntryOnStartup
 ```
 
-It starts scanning after startup, and the status line reports detection, saving, duplicates, removals, and read errors. **Recorded drives** shows existing rows and selected workbook columns; **Activity** shows recent events; **Details** shows paths, smartctl version, settings, and the selected columns. The debug log on disk keeps the full probe history.
+Run `Get-Help .\USB-Drive-Inventory-Collector.ps1 -Full` or inspect the parameter block for other console options. The native GUI currently uses the default output folder beside its EXE.
 
-Use **Pause scanning** to stop new scans; a probe already running will finish. **Manual entry** opens a form with the same field validation, `N/A` handling, capacity units, categorized drive types, and custom **Other** choices as the console. Review before saving; from review you can edit, save and start another record, or save and copy everything except the serial. A duplicate serial gives you the choice to change it or cancel. **Copy last** starts with the last saved drive's five standard fields and an empty serial. **Workbook setup** selects optional identity columns and makes a backup before a layout change. **Finish** waits for a probe in progress, restores the temporary AutoPlay setting, and closes the window.
+## Drive identification and limits
 
-The GUI runs drive probes in a background PowerShell runspace, so slow smartctl calls do not block the controls. Manual entry and setup can be opened during a probe; the result is processed after the dialog closes. The collector handles one newly inserted disk per scan and requires removal before retrying a disk that failed to read.
+The collectors query USB physical disks with smartctl autodetection and transport fallbacks for common USB bridges. They classify drives as specifically as their reported identity allows, including PATA/IDE where supported. Unknown values are recorded as `N/A`. Some bridges hide the drive's identity or report their own; check unusual records against the physical label.
 
-Both modes share the same drive detection, direct XLSX writer, logging, and AutoPlay restoration functions in `USB-Drive-Inventory-Collector.ps1`. Windows Forms adds no Excel dependency or separate GUI package.
-
-### Microsoft Defender reports
-
-Microsoft Defender flagged an earlier GitHub source ZIP on September 27, 2026, and the VBS launcher on September 28 as `Trojan:Script/Wacatac.H!ml`. The VBS launcher has been removed. After the repository tests and `.gitignore` were removed, the maintainer reported a clean download of the source ZIP on their machine. A new detection should be submitted with the exact affected file to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission).
-
-### Console workflow
-
-1. Start `USB-Drive-Inventory-Collector.ps1 -Mode CLI` in an elevated PowerShell window.
-2. Answer the AutoPlay prompt if it appears.
-3. Connect a drive through a USB adapter or enclosure.
-4. Wait for the drive to be recorded.
-5. Remove it after the script reports that the record was saved.
-6. Connect the next drive.
-7. Press `Ctrl+C` when finished.
-
-The waiting screen shows the version, maintainer, repository link, and a numbered Usage section. Press `[D]` while waiting to see the full output and log paths, USB adapter scope, workbook backend, smartctl version, and probe timeout; press `[D]` again to hide them. Press `[M]` for manual entry. After a read failure or drive removal, the console reminds you that `[M]` opens manual entry. The console clears when a new drive is detected so the current result is easy to read; the log keeps the run history. Press `[Ctrl+C]` when finished.
-
-### Workbook column setup
-
-In the GUI, click **Workbook setup**. In the console, press `[S]` while waiting. To configure columns before any connected drive is probed, start either mode with `-SetupOnStartup`:
-
-```powershell
-.\USB-Drive-Inventory-Collector.ps1 -SetupOnStartup
-# Console mode: .\USB-Drive-Inventory-Collector.ps1 -Mode CLI -SetupOnStartup
-```
-
-The five default columns stay in place. You can add Interface, Firmware Version, Model Family, Form Factor, Rotation Rate (RPM), Capacity (Bytes), Logical and Physical Sector Sizes, ATA Version, SATA Version, Reported Protocol, and Probe Transport. These values come from the identity query already used by the collector. Setup does not run SMART health tests or collect every vendor-specific attribute.
-
-Enter a field number to toggle it, `[A]` to select all extra fields, or `[D]` for the default layout. `[Y]` applies the selection; `[C]` cancels it. Before changing columns, the collector copies the workbook to a file named `Inventory.xlsx.before-setup-<unique ID>.xlsx` beside the original. Removing a column excludes its data from the active workbook; the backup retains it.
-
-The workbook headers remember the selection on the next run. Existing values in retained columns survive later saves. Newly added columns contain `N/A` for older records, manual records, and details the adapter does not expose. Copying a manual record copies the five core fields and asks for a new serial; optional identity details remain `N/A`. Automatic collection pauses while setup is open.
-
-Use a separate output workbook for a different collection layout. Unsupported or duplicate headers stop the collector before it overwrites the workbook.
-
-### Manual drive entry
-
-Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-Mode CLI -ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
-
-The form asks for Make, Model, Serial Number, a numeric capacity and unit, and drive type. Capacity accepts positive whole numbers and decimals, such as `0.005`; enter the unit on the next screen. Capacity units include `B`, `KB`, `MB`, `GB`, `TB`, `PB`, and **Other**, which lets you enter a custom unit. Drive types have numbered choices grouped under **Standard**, **Enterprise**, and **Other**, sorted within each group; the final **Other** choice accepts a custom type. The form accepts plain letters, digits, spaces, and limited punctuation. Leading and trailing spaces are removed; Model and serial are converted to uppercase, while Make keeps the case you enter. For example, an amount of `2` with unit `TB` is saved as `2 TB`. Press Enter (or enter only spaces) to save `N/A` for a field. Skipping either the capacity number or unit saves the capacity as `N/A`.
-
-The console clears between fields, the capacity amount and unit, review, and the saved record. Before saving, review the five fields. Choose `Y` to save and then decide whether to add another drive, copy it, or return to automatic collection. Choose `L` to save and immediately copy that drive for the next serial number, `E` to edit a field, or `C` to cancel. Both save options check for duplicates and wait for a successful workbook write before starting another record. When editing, `:back` or `:cancel` returns to review without changing the field. Submitting an edited value also returns to review. During initial entry, `:cancel` leaves manual entry without saving that drive. If the serial already exists in the workbook, choose `S` to enter a different serial for the current record or `C` to cancel it. The save options return when the serial is unique. `N/A` is accepted as a serial, but it cannot be checked for duplicates. A failed workbook save leaves the form open for another attempt.
-
-When you open manual entry and the workbook already has a drive, choose `N` for a new record or `L` to copy the last saved drive. Copying fills in Make, Model, Capacity, and Type, then asks for a new serial number and shows the full review before saving. After saving, choose `A` for another new drive, `L` to copy the one you just saved with a new serial, or `R` to resume automatic collection.
-
-During each insertion, the collector:
-
-1. Finds USB physical disks reported by Windows.
-2. Excludes disks marked as boot or system disks.
-3. Gives the USB bridge a short period to initialize.
-4. Probes supported smartctl transports.
-5. Reads the underlying drive identity when available.
-6. Appends the five standard fields and any selected extra fields to `Inventory.xlsx`.
-7. Saves the workbook before waiting for the next drive.
-
-The script waits for removal before treating another device on the same Windows disk number as a new insertion.
-After a read failure, it waits for removal and reinsertion before trying that disk number again.
-
-### Duplicate Serial Numbers
-
-A serial number already present in the workbook is not added again. The collector prints the detected information, records the duplicate in the log, and leaves the workbook unchanged.
-
-If a drive reports no serial number, the value is stored as `N/A`. The collector cannot use serial-based duplicate detection to distinguish two drives that both report `N/A`.
-
-### Read-only Behavior
-
-Automatic collection uses Windows disk metadata and smartctl identity queries. Manual collection uses the values you enter. Neither mode issues commands to:
-
-- erase or sanitize a drive
-- format a drive
-- create or remove partitions
-- mount or dismount volumes
-- change SMART settings
-- write files to the attached drive
-
-Windows boot and system disks are excluded from collection.
-
-### Logs
-
-Each run creates a timestamped log under `Output\Logs` containing information useful for troubleshooting, including:
-
-- script and PowerShell version
-- dependency checks
-- USB disk detection and removal
-- smartctl transport probes and exit codes
-- detected protocol and drive identity
-- duplicate detection
-- workbook save attempts
-- exception type, HRESULT, stack position, and inner exceptions when available
-
-If a drive read or workbook update fails, the console prints the path to that run's log. The GUI lists the error in **Activity** and shows the log path in **Details**.
-
-### Parameters
-
-The defaults are enough for normal use. Both modes accept paths and polling settings:
-
-```powershell
-.\USB-Drive-Inventory-Collector.ps1 `
-    -OutputPath "C:\Inventory\Inventory.xlsx" `
-    -LogPath "C:\Inventory\collector.log" `
-    -UsbDevicePattern "*" `
-    -PollSeconds 1
-```
-
-| Parameter | Purpose |
-| --- | --- |
-| `Mode` | Selects `GUI` (default) or `CLI`. The launcher prompts for this choice. |
-| `OutputPath` | Overrides the default `Output\Inventory.xlsx` path. |
-| `LogPath` | Overrides the default timestamped log path. |
-| `UsbDevicePattern` | Filters Windows USB disk friendly names. Default is `*`. |
-| `PollSeconds` | Controls how often Windows is checked for connected USB disks. |
-| `SmartctlRetries` | Sets the number of full transport-probe cycles. |
-| `InitialSettleMilliseconds` | Sets the delay after Windows first detects a drive before probing begins. |
-| `RetryDelayMilliseconds` | Sets the delay between smartctl retry cycles. |
-| `WorkbookSaveRetries` | Sets the number of workbook save attempts. |
-| `WorkbookRetryDelayMilliseconds` | Sets the delay between workbook save attempts. |
-| `SmartctlTimeoutSeconds` | Maximum time for each smartctl process; default 30 seconds. A stalled probe is stopped, and the drive is skipped until removal and reinsertion. |
-| `NoDependencyInstallPrompt` | Exits instead of offering to install smartmontools when it is missing. |
-| `SetupOnStartup` | Opens workbook column setup before probing connected drives. |
-| `ManualEntryOnStartup` | Opens manual entry after startup; useful if the `M` console hotkey is unavailable. |
-
-## Limitations
-
-- USB bridge behavior is not standardized. Some adapters will expose more information than others.
-- A bridge may report its own identity instead of the underlying drive. The collector rejects common bridge-style identities when possible and tries alternate smartctl transports.
-- Form factor is not always exposed. In that case Type stays broader, such as `NVMe SSD` or `SATA SSD`.
-- Manufacturer detection is conservative. An unknown model prefix returns `N/A` instead of a guessed manufacturer.
-- Keep `Inventory.xlsx` closed while collecting. The script replaces the workbook file when saving an update.
-- If a USB bridge stops responding, the collector stops an overdue smartctl process and logs the timeout. This does not reset the bridge's hardware. Unplug and reconnect a stuck adapter, then reinsert the drive. Windows device restart commands can reset a specific Plug and Play device, but restarting a shared hub or controller can interrupt other attached devices, and a restart is not guaranteed to cycle USB port power.
-- Windows may take longer than the polling interval to register removal. Wait for the removal message before inserting the next drive; a swap that occurs entirely between polls may be missed.
-- In the console, automatic scanning pauses during manual entry. In the GUI, a running probe can finish while a dialog is open; its result is processed after the dialog closes.
-- The collector records drive information only. It does not perform any follow-up action on the hardware.
-
-## Roadmap
-
-- Investigate safe recovery for USB adapters that stop responding. Restarting a shared controller could interrupt unrelated devices, so the current collector reports the timeout and waits for the adapter to be reconnected.
+A smartctl process is limited to 30 seconds. If the bridge locks up, unplug and reconnect the adapter before retrying. The application does not reset a shared USB controller. A drive that is swapped entirely between scan intervals may be missed; wait for its removal message.
 
 ## License
 
-This project is released under [The Unlicense](UNLICENSE). You may use, modify, share, or sell it without attribution. The software is provided without warranty.
+[The Unlicense](UNLICENSE). The software is provided without warranty.
