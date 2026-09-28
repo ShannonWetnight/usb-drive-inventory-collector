@@ -29,6 +29,7 @@ internal sealed class CollectorForm : Form
     private readonly TabPage _terminalPage = new("Terminal");
     private EmbeddedTerminalIO? _terminalIO;
     private TerminalCollector? _terminalSession;
+    private int _terminalGeneration;
     private readonly ToolTip _toolTip = new();
     private readonly Button _pause = new() { Text = "Pause Scanning", Width = 140 };
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
@@ -190,11 +191,12 @@ internal sealed class CollectorForm : Form
         using var io = new EmbeddedTerminalIO();
         _terminalIO = io;
         _terminalSession = TerminalCollector.ForEmbedded(io);
+        var generation = ++_terminalGeneration;
         _terminalOutput.Clear(); _terminalInput.Enabled = true;
         _terminal.Text = "Close Terminal";
         _tabs.SelectedTab = _terminalPage; _terminalInput.Focus();
-        io.Output += value => { if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { if (!IsDisposed && ReferenceEquals(io, _terminalIO)) { _terminalOutput.AppendText(value); _terminalOutput.ScrollToCaret(); } }); };
-        io.Cleared += () => { if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { if (!IsDisposed && ReferenceEquals(io, _terminalIO)) _terminalOutput.Clear(); }); };
+        io.Output += value => { if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { if (!IsDisposed && generation == _terminalGeneration) { _terminalOutput.AppendText(value); _terminalOutput.ScrollToCaret(); } }); };
+        io.Cleared += () => { if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { if (!IsDisposed && generation == _terminalGeneration) _terminalOutput.Clear(); }); };
         try
         {
             Activity("Terminal opened. Scanning is paused in this window.");
