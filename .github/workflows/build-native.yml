@@ -26,9 +26,10 @@ jobs:
         shell: pwsh
         run: |
           $path = Join-Path $env:RUNNER_TEMP 'Collector-Workbook-Check.xlsx'
-          & "publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe" --verify-workbook $path
-          if ($LASTEXITCODE -ne 0) {
-            Get-Content "$path.error.txt"
+          $exe = Join-Path (Resolve-Path publish) 'USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe'
+          $result = Start-Process -FilePath $exe -ArgumentList @('--verify-workbook', $path) -Wait -PassThru
+          if ($result.ExitCode -ne 0) {
+            if (Test-Path "$path.error.txt") { Get-Content "$path.error.txt" }
             throw 'Workbook generation or round trip failed.'
           }
           python -m pip install --quiet openpyxl==3.1.5
