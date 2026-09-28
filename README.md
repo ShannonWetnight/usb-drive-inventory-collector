@@ -59,6 +59,7 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
 | **Reset View** | Appears when the Recorded Drives view changes. Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
+| Refresh icon | Reloads the active workbook from disk and updates Recorded Drives. |
 | **Finish** | Shows the saved workbook path with Copy Path, Open Folder, and Close controls. |
 | Double-click a recorded row | Edits that saved record, including after sorting. |
 
