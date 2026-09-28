@@ -210,7 +210,7 @@ Use a separate output workbook for a different collection layout. Unsupported or
 
 ### Manual drive entry
 
-Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
+Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-Mode CLI -ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
 
 The form asks for Make, Model, Serial Number, a numeric capacity and unit, and drive type. Capacity accepts positive whole numbers and decimals, such as `0.005`; enter the unit on the next screen. Capacity units include `B`, `KB`, `MB`, `GB`, `TB`, `PB`, and **Other**, which lets you enter a custom unit. Drive types have numbered choices grouped under **Standard**, **Enterprise**, and **Other**, sorted within each group; the final **Other** choice accepts a custom type. The form accepts plain letters, digits, spaces, and limited punctuation. Leading and trailing spaces are removed; Model and serial are converted to uppercase, while Make keeps the case you enter. For example, an amount of `2` with unit `TB` is saved as `2 TB`. Press Enter (or enter only spaces) to save `N/A` for a field. Skipping either the capacity number or unit saves the capacity as `N/A`.
 
