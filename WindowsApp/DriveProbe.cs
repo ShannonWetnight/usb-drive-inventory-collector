@@ -71,7 +71,9 @@ internal sealed class DriveProbe
             foreach (var transport in transports)
             {
                 ct.ThrowIfCancellationRequested();
-                var args = new List<string> { "-i", "-jo" };
+                // The optional JSON output flag must use --json=o. "-jo" is parsed
+                // as -j followed by -o (offlineauto), so every bridge probe fails.
+                var args = new List<string> { "-i", "--json=o" };
                 if (transport != "auto") { args.Add("-d"); args.Add(transport); }
                 args.Add(device);
                 try
@@ -88,6 +90,8 @@ internal sealed class DriveProbe
                     var messages = root.TryGetProperty("smartctl", out var smart) && smart.TryGetProperty("messages", out var reported) && reported.ValueKind == JsonValueKind.Array
                         ? string.Join(" | ", reported.EnumerateArray().Select(message => Prop(message, "string"))) : "";
                     _log($"identity disk={disk.Number} transport={transport} modelPresent={model != "N/A"} serialPresent={serial != "N/A"} capacityPresent={capacity != "N/A"} messages={messages[..Math.Min(messages.Length, 500)]}");
+                    if (messages.Contains("INVALID ARGUMENT", StringComparison.OrdinalIgnoreCase) || messages.Contains("UNRECOGNIZED OPTION", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException($"smartctl rejected the probe command: {messages[..Math.Min(messages.Length, 180)]}");
                     if ((model == "N/A" && serial == "N/A") || capacity == "N/A") { outcomes[transport] = "identity incomplete"; continue; }
                     var protocol = Prop(root, "device", "protocol");
                     var record = new DriveRecord {
@@ -108,6 +112,7 @@ internal sealed class DriveProbe
                 }
                 catch (TimeoutException) { throw; }
                 catch (OperationCanceledException) { throw; }
+                catch (InvalidOperationException) { throw; }
                 catch (Exception ex) { outcomes[transport] = ex is JsonException ? "invalid JSON" : ex.Message; _log($"identity disk={disk.Number} transport={transport}: {ex}"); }
             }
             if (fallback is not null) return fallback;

@@ -18,11 +18,12 @@ internal sealed class CollectorForm : Form
     private readonly System.Windows.Forms.Timer _readingPulse = new() { Interval = 700 };
     private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 2400 };
     private bool _readingPulseBright;
-    private bool _busy, _paused, _modal;
+    private bool _busy, _paused, _modal, _updatingGrid, _viewChanged;
     private string _version = "N/A";
     private readonly RichTextBox _status = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.None, BackColor = Color.FromArgb(246, 248, 251), Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
     private readonly Label _guidance = new() { Dock = DockStyle.Fill, Text = "Insert one drive at a time." };
-    private readonly Label _footer = new() { AutoEllipsis = true, AutoSize = false, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Label _recordCount = new() { AutoSize = false, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Label _workbookLocation = new() { AutoEllipsis = true, AutoSize = false, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _copyPath = new() { Text = "Copy Path", Size = new Size(95, 28) };
     private readonly Button _openPath = new() { Text = "Open Folder", Size = new Size(110, 28) };
     private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, SelectionMode = DataGridViewSelectionMode.FullRowSelect, EnableHeadersVisualStyles = false, ColumnHeadersHeight = 34 };
@@ -42,7 +43,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
-    private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = true };
+    private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
     public CollectorForm()
     {
@@ -101,17 +102,21 @@ internal sealed class CollectorForm : Form
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
         _tabs.HandleCreated += (_, _) => PositionTerminalToggle();
+        Shown += (_, _) => { PositionTerminalToggle(); UpdateResetViewButton(); };
         layout.Controls.Add(tabHost, 0, 3);
         var footer = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
-        footer.Controls.Add(_footer); footer.Controls.Add(_copyPath); footer.Controls.Add(_openPath);
+        footer.Controls.AddRange([_recordCount, _workbookLocation, _copyPath, _openPath]);
         footer.Resize += (_, _) =>
         {
             const int gap = 8;
-            _openPath.Location = new Point(footer.ClientSize.Width - _openPath.Width - 14, (footer.ClientSize.Height - _openPath.Height) / 2);
-            _copyPath.Location = new Point(_openPath.Left - _copyPath.Width - gap, (footer.ClientSize.Height - _copyPath.Height) / 2);
-            _footer.SetBounds(18, (footer.ClientSize.Height - 28) / 2, Math.Max(0, _copyPath.Left - gap - 18), 28);
+            var top = (footer.ClientSize.Height - 28) / 2;
+            _openPath.Location = new Point(footer.ClientSize.Width - _openPath.Width - 14, top);
+            _copyPath.Location = new Point(_openPath.Left - _copyPath.Width - gap, top);
+            _recordCount.SetBounds(18, top, 110, 28);
+            var workbookLeft = _recordCount.Right + 4;
+            _workbookLocation.SetBounds(workbookLeft, top, Math.Max(0, _copyPath.Left - gap - workbookLeft), 28);
         };
-        _toolTip.SetToolTip(_footer, "Workbook Save Location"); _toolTip.SetToolTip(_copyPath, "Copy workbook location to clipboard"); _toolTip.SetToolTip(_openPath, "Open the workbook folder in File Explorer");
+        _toolTip.SetToolTip(_workbookLocation, "Workbook Save Location"); _toolTip.SetToolTip(_copyPath, "Copy workbook location to clipboard"); _toolTip.SetToolTip(_openPath, "Open the workbook folder in File Explorer");
         layout.Controls.Add(footer, 0, 4);
         _pause.Click += (_, _) => SetScanningPaused(!_paused);
         _manual.Click += (_, _) => ManualEntry(false);
@@ -120,12 +125,17 @@ internal sealed class CollectorForm : Form
         _tabs.SelectedIndexChanged += (_, _) =>
         {
             _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage) || _terminalSession is not null;
-            _resetView.Visible = ReferenceEquals(_tabs.SelectedTab, recordsPage);
+            UpdateResetViewButton();
             PositionTerminalToggle();
             if (_terminalToggle.Visible) _terminalToggle.BringToFront();
-            if (_resetView.Visible) { _resetView.BringToFront(); BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(_tabs.SelectedTab, recordsPage)) _grid.Focus(); })); }
+            if (ReferenceEquals(_tabs.SelectedTab, recordsPage)) BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(_tabs.SelectedTab, recordsPage)) _grid.Focus(); }));
         };
         _resetView.Click += (_, _) => ResetRecordView();
+        _grid.ColumnWidthChanged += (_, _) => MarkViewChanged();
+        _grid.ColumnDisplayIndexChanged += (_, _) => MarkViewChanged();
+        _grid.RowHeightChanged += (_, _) => MarkViewChanged();
+        _grid.Sorted += (_, _) => MarkViewChanged();
+        _grid.Scroll += (_, _) => MarkViewChanged();
         _terminalInput.KeyDown += (_, e) => { if (e.KeyCode != Keys.Enter || _terminalIO is null) return; e.SuppressKeyPress = true; SubmitTerminalInput(); };
         _terminalSend.Click += (_, _) => SubmitTerminalInput();
         KeyPress += TerminalKeyPress;
@@ -335,41 +345,65 @@ internal sealed class CollectorForm : Form
     }
     private void RefreshGrid(bool preserveSort = true)
     {
-        var sortKey = preserveSort ? _grid.SortedColumn?.Name : null;
-        var sortOrder = _grid.SortOrder;
-        _grid.Columns.Clear();
-        _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(48, 76, 102);
-        _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        _grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 76, 102);
-        _grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, SortMode = DataGridViewColumnSortMode.NotSortable });
-        foreach (var key in _book.Columns)
+        var wasUpdating = _updatingGrid;
+        _updatingGrid = true;
+        try
         {
-            var width = key switch { "Make" => 160, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = key, HeaderText = InventoryBook.Header(key), Width = width, MinimumWidth = 100, SortMode = DataGridViewColumnSortMode.Automatic });
+            var sortKey = preserveSort ? _grid.SortedColumn?.Name : null;
+            var sortOrder = _grid.SortOrder;
+            _grid.Columns.Clear();
+            _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(48, 76, 102);
+            _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            _grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 76, 102);
+            _grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, SortMode = DataGridViewColumnSortMode.NotSortable });
+            foreach (var key in _book.Columns)
+            {
+                var width = key switch { "Make" => 160, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };
+                _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = key, HeaderText = InventoryBook.Header(key), Width = width, MinimumWidth = 100, SortMode = DataGridViewColumnSortMode.Automatic });
+            }
+            _grid.Rows.Clear();
+            for (var index = 0; index < _book.Records.Count; index++)
+            {
+                var row = _book.Records[index];
+                var displayIndex = _grid.Rows.Add(new object[] { index + 1 }.Concat(_book.Columns.Select(key => (object)row[key])).ToArray());
+                _grid.Rows[displayIndex].Tag = index;
+            }
+            if (sortKey is not null && _grid.Columns.Contains(sortKey))
+                _grid.Sort(_grid.Columns[sortKey]!, sortOrder == SortOrder.Descending ? System.ComponentModel.ListSortDirection.Descending : System.ComponentModel.ListSortDirection.Ascending);
+            _grid.ClearSelection();
+            RefreshFooter();
+            _viewChanged = sortKey is not null;
         }
-        _grid.Rows.Clear();
-        for (var index = 0; index < _book.Records.Count; index++)
-        {
-            var row = _book.Records[index];
-            var displayIndex = _grid.Rows.Add(new object[] { index + 1 }.Concat(_book.Columns.Select(key => (object)row[key])).ToArray());
-            _grid.Rows[displayIndex].Tag = index;
-        }
-        if (sortKey is not null && _grid.Columns.Contains(sortKey))
-            _grid.Sort(_grid.Columns[sortKey]!, sortOrder == SortOrder.Descending ? System.ComponentModel.ListSortDirection.Descending : System.ComponentModel.ListSortDirection.Ascending);
-        _grid.ClearSelection();
-        RefreshFooter();
+        finally { _updatingGrid = wasUpdating; if (!wasUpdating) UpdateResetViewButton(); }
     }
     private void ResetRecordView()
     {
-        RefreshGrid(preserveSort: false);
-        _grid.HorizontalScrollingOffset = 0;
-        if (_grid.Rows.Count > 0) _grid.FirstDisplayedScrollingRowIndex = 0;
+        _updatingGrid = true;
+        try
+        {
+            RefreshGrid(preserveSort: false);
+            _grid.HorizontalScrollingOffset = 0;
+            if (_grid.Rows.Count > 0) _grid.FirstDisplayedScrollingRowIndex = 0;
+        }
+        finally { _updatingGrid = false; _viewChanged = false; UpdateResetViewButton(); }
         _grid.Focus();
+    }
+    private void MarkViewChanged()
+    {
+        if (_updatingGrid || !_grid.IsHandleCreated || _tabs.SelectedIndex != 0) return;
+        _viewChanged = true;
+        UpdateResetViewButton();
+    }
+    private void UpdateResetViewButton()
+    {
+        _resetView.Visible = _viewChanged && _tabs.SelectedIndex == 0;
+        if (_resetView.Visible) _resetView.BringToFront();
     }
     private void RefreshFooter()
     {
-        _footer.Text = $"Records: {_book.Records.Count}     Workbook: {_book.Path}";
+        _recordCount.Text = $"Records: {_book.Records.Count}";
+        _workbookLocation.Text = $"Workbook: {_book.Path}";
     }
     private void ShowVersionInformation()
     {

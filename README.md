@@ -33,7 +33,7 @@
 
 ## Download and Run
 
-The next tagged version is **4.2.7**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.7.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.2.8**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.8.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -57,7 +57,7 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Version Information** | Opens the app version and technical details from the banner. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
-| **Reset View** | Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
+| **Reset View** | Appears when the Recorded Drives view changes. Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
 | **Finish** | Shows the saved workbook path with Copy Path, Open Folder, and Close controls. |
 | Double-click a recorded row | Edits that saved record, including after sorting. |
 
@@ -70,7 +70,7 @@ Select the **Terminal** tab, then **Enable Terminal** to start the console-style
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.2.7.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.2.8.exe' --terminal
 ```
 
 ### Terminal Keys
