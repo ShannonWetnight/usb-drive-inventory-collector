@@ -92,7 +92,7 @@ internal sealed class CollectorForm : Form
         };
         _toolTip.SetToolTip(_footer, "Workbook Save Location"); _toolTip.SetToolTip(_copyPath, "Copy workbook location to clipboard"); _toolTip.SetToolTip(_openPath, "Open the workbook folder in File Explorer");
         layout.Controls.Add(footer, 0, 4);
-        _pause.Click += (_, _) => { _paused = !_paused; _pause.Text = _paused ? "Resume Scanning" : "Pause Scanning"; Activity(_paused ? "Scanning paused." : "Waiting for a USB drive..."); };
+        _pause.Click += (_, _) => { _paused = !_paused; _pause.Text = _paused ? "Resume Scanning" : "Pause Scanning"; Activity(_paused ? "Scanning is paused." : "Waiting for a USB drive..."); };
         _manual.Click += (_, _) => ManualEntry(false);
         _setup.Click += (_, _) => Setup();
         _terminal.Click += async (_, _) => await OpenTerminalAsync();
@@ -114,6 +114,8 @@ internal sealed class CollectorForm : Form
         var display = _terminalSession is not null && !text.StartsWith("Terminal closed.", StringComparison.Ordinal) &&
             !text.Contains("Scanning is paused", StringComparison.Ordinal)
             ? text + " Scanning is paused in this window." : text;
+        if (_paused && _terminalSession is null && !display.Contains("Scanning is paused", StringComparison.Ordinal))
+            display += " Scanning is paused.";
         _status.Text = display;
         _status.SelectAll(); _status.SelectionColor = Color.FromArgb(15, 20, 25);
         const string paused = "Scanning is paused";
@@ -232,7 +234,7 @@ internal sealed class CollectorForm : Form
     private void ShowVersionInformation()
     {
         using var dialog = new Form { Text = "Version Information", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.Sizable, ClientSize = new Size(700, 350), MinimumSize = new Size(520, 300) };
-        var info = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, WordWrap = false, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
+        var info = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, TabStop = false, WordWrap = false, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
             $"USB Drive Inventory Collector v{Application.ProductVersion}", "Maintainer: Shannon Wetnight",
             "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector",
             $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}",
@@ -241,6 +243,7 @@ internal sealed class CollectorForm : Form
             "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process",
             "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))] };
         dialog.Controls.Add(info);
+        dialog.Shown += (_, _) => info.Select(0, 0);
         dialog.ShowDialog(this);
     }
     private async Task OpenTerminalAsync()
@@ -338,7 +341,7 @@ internal sealed class CollectorForm : Form
                 }
                 catch (Exception ex) { MessageBox.Show(dialog, "That workbook could not be opened: " + ex.Message, "Workbook Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             };
-            var all = Button("Select All", 20, 558, 112); var defaults = Button("Defaults", 140, 558, 112); var apply = Button("Apply", 290, 558, 112); var cancel = Button("Cancel", 410, 558, 112);
+            var all = Button("Select All", 20, 558, 112); var defaults = Button("Defaults", 153, 558, 112); var apply = Button("Apply", 286, 558, 112); var cancel = Button("Cancel", 419, 558, 112);
             all.Click += (_, _) => { for (var i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
             defaults.Click += (_, _) => { for (var i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
             cancel.Click += (_, _) => dialog.Close();
@@ -369,19 +372,21 @@ internal sealed class CollectorForm : Form
         {
             using var dialog = new Form { Text = $"Edit Recorded Drive – Row {index + 2}", StartPosition = FormStartPosition.CenterParent, ClientSize = new Size(650, 570), MinimumSize = new Size(500, 380), Font = new Font("Segoe UI", 10) };
             var intro = new Label { Text = "Edit the saved values below, then save the row. Blank values become N/A.", Dock = DockStyle.Top, Height = 42, Padding = new Padding(18, 11, 0, 0) };
-            var fields = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, Padding = new Padding(18, 4, 18, 4) };
+            var keys = _book.Columns.ToArray();
+            var fields = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, ColumnCount = 2, RowCount = keys.Length + 1, Padding = new Padding(18, 4, 18, 4) };
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
             fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             var inputs = new Dictionary<string, TextBox>();
-            foreach (var key in _book.Columns)
+            for (var row = 0; row < keys.Length; row++)
             {
-                var row = fields.RowCount++;
+                var key = keys[row];
                 fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
                 fields.Controls.Add(new Label { Text = InventoryBook.Header(key), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
                 var input = new TextBox { Text = _book.Records[index][key], Dock = DockStyle.Fill, Margin = new Padding(0, 4, 2, 4) };
                 fields.Controls.Add(input, 1, row);
                 inputs[key] = input;
             }
+            fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 55, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 7, 15, 0) };
             var cancel = new Button { Text = "Cancel", Width = 95, Height = 34 };
             var save = new Button { Text = "Save Changes", Width = 140, Height = 34 };
@@ -417,28 +422,41 @@ internal sealed class CollectorForm : Form
         {
             using var dialog = new Form { Text = "Manual Drive Entry", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(560, 410), MaximizeBox = false, MinimizeBox = false, Font = new Font("Segoe UI", 10) };
             dialog.Controls.Add(new Label { Text = "Leave a field blank for N/A. Model and serial are saved in uppercase.", Bounds = new Rectangle(20, 12, 520, 30) });
-            var labels = new[] { "1. Make", "2. Model", "3. Serial Number", "4. Capacity (number only)", "Capacity Unit", "5. Drive Type" };
+            var labels = new[] { "1. Make", "2. Model", "3. Serial Number", "4. Capacity (number only)" };
             for (int i = 0; i < labels.Length; i++) dialog.Controls.Add(new Label { Text = labels[i], Bounds = new Rectangle(20, 47 + 43 * i, 195, 26) });
             var make = Box(219, 47, 320); var model = Box(219, 90, 320); var serial = Box(219, 133, 320); var amount = Box(219, 176, 175);
             model.CharacterCasing = CharacterCasing.Upper; serial.CharacterCasing = CharacterCasing.Upper;
-            var unit = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Bounds = new Rectangle(219, 219, 135, 28) };
+            var unit = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Bounds = new Rectangle(405, 176, 134, 28), AccessibleName = "Capacity Unit" };
+            _toolTip.SetToolTip(unit, "Capacity Unit");
             unit.Items.AddRange(["N/A", "B", "KB", "MB", "GB", "TB", "PB", "Other"]); unit.SelectedIndex = 0;
-            var customUnit = Box(365, 219, 174); customUnit.Visible = false;
-            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Bounds = new Rectangle(219, 262, 320, 28), MaxDropDownItems = 12 };
+            var customUnitLabel = new Label { Text = "Custom Capacity Unit", Bounds = new Rectangle(20, 219, 195, 26) };
+            var customUnit = Box(219, 219, 320);
+            var typeLabel = new Label { Text = "5. Drive Type", Bounds = new Rectangle(20, 219, 195, 26) };
+            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 12 };
             var types = DriveTypes.Options;
             type.Items.AddRange(types.Cast<object>().ToArray());
             type.SelectedIndex = 0;
-            var customType = Box(219, 299, 320); customType.Visible = false;
-            unit.SelectedIndexChanged += (_, _) => customUnit.Visible = unit.Text == "Other";
-            type.SelectedIndexChanged += (_, _) => customType.Visible = type.Text == "Other";
+            var customTypeLabel = new Label { Text = "Custom Drive Type", Bounds = new Rectangle(20, 262, 195, 26) };
+            var customType = Box(219, 262, 320);
+            void UpdateManualLayout()
+            {
+                var otherUnit = unit.Text == "Other";
+                customUnit.Visible = customUnitLabel.Visible = otherUnit;
+                type.Top = typeLabel.Top = otherUnit ? 262 : 219;
+                customType.Top = customTypeLabel.Top = type.Top + 43;
+                customType.Visible = customTypeLabel.Visible = type.Text.Equals("Other", StringComparison.OrdinalIgnoreCase);
+            }
+            unit.SelectedIndexChanged += (_, _) => UpdateManualLayout();
+            type.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             type.TextUpdate += (_, _) =>
             {
                 var query = type.Text; var caret = type.SelectionStart;
                 type.BeginUpdate(); type.Items.Clear(); type.Items.AddRange(DriveTypes.Matches(query).Cast<object>().ToArray()); type.EndUpdate();
                 type.Text = query; type.SelectionStart = caret; type.DroppedDown = true;
-                customType.Visible = query.Equals("Other", StringComparison.OrdinalIgnoreCase);
+                UpdateManualLayout();
             };
-            dialog.Controls.AddRange([make, model, serial, amount, unit, customUnit, type, customType]);
+            dialog.Controls.AddRange([make, model, serial, amount, unit, customUnitLabel, customUnit, typeLabel, type, customTypeLabel, customType]);
+            UpdateManualLayout();
             if (copyLast && _book.Records.LastOrDefault() is { } last) { Fill(last); serial.Clear(); }
             var review = Button("Review Drive", 20, 355, 130); var copy = Button("Copy Last Drive", 162, 355, 160); var back = Button("Return to Scanning", 334, 355, 205);
             copy.Enabled = _book.Records.Count > 0;
@@ -477,7 +495,8 @@ internal sealed class CollectorForm : Form
                 var media = record["Type"];
                 type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray());
                 if (types.Contains(media, StringComparer.OrdinalIgnoreCase)) type.Text = media;
-                else { type.Text = "Other"; customType.Text = media; customType.Visible = true; }
+                else { type.Text = "Other"; customType.Text = media; }
+                UpdateManualLayout();
             }
         }
         finally { _modal = false; }
