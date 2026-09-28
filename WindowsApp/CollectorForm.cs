@@ -771,10 +771,12 @@ internal sealed class CollectorForm : Form
             var customUnitLabel = new Label { Text = "Custom Capacity Unit", Bounds = new Rectangle(20, 219, 195, 26) };
             var customUnit = Box(219, 219, 320);
             var typeLabel = new Label { Text = "5. Drive Type", Bounds = new Rectangle(20, 219, 195, 26) };
-            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 12 };
+            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
             var types = DriveTypes.Options;
             type.Items.AddRange(types.Cast<object>().ToArray());
             type.SelectedIndex = 0;
+            void SizeTypeDropdown() => type.DropDownHeight = Math.Max(type.ItemHeight, type.ItemHeight * Math.Min(15, type.Items.Count));
+            SizeTypeDropdown();
             var customTypeLabel = new Label { Text = "Custom Drive Type", Bounds = new Rectangle(20, 262, 195, 26) };
             var customType = Box(219, 262, 320);
             void UpdateManualLayout()
@@ -787,17 +789,26 @@ internal sealed class CollectorForm : Form
             }
             unit.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             type.SelectedIndexChanged += (_, _) => UpdateManualLayout();
+            var updatingTypeOptions = false;
             type.TextUpdate += (_, _) =>
             {
+                if (updatingTypeOptions) return;
                 var query = type.Text; var caret = type.SelectionStart;
-                type.BeginUpdate(); type.Items.Clear(); type.Items.AddRange(DriveTypes.Matches(query).Cast<object>().ToArray()); type.EndUpdate();
-                type.Text = query; type.SelectionStart = caret; type.DroppedDown = true;
+                type.DroppedDown = false;
+                updatingTypeOptions = true;
+                try
+                {
+                    type.BeginUpdate(); type.Items.Clear(); type.Items.AddRange(DriveTypes.Matches(query).Cast<object>().ToArray()); type.EndUpdate();
+                    type.Text = query; type.SelectionStart = caret; SizeTypeDropdown();
+                }
+                finally { updatingTypeOptions = false; }
+                type.DroppedDown = true;
                 UpdateManualLayout();
             };
             dialog.Controls.AddRange([make, model, serial, amount, unit, customUnitLabel, customUnit, typeLabel, type, customTypeLabel, customType]);
             UpdateManualLayout();
             if (copyLast && _book.Records.LastOrDefault() is { } last) { Fill(last); serial.Clear(); }
-            var review = Button("Review Drive", 20, 355, 130); var copy = Button("Copy Last Drive", 162, 355, 160); var back = Button("Return to Scanning", 334, 355, 205);
+            var review = Button("Next", 20, 355, 130); var copy = Button("Copy Last Drive", 162, 355, 160); var back = Button("Return to Scanning", 334, 355, 205);
             copy.Enabled = _book.Records.Count > 0;
             copy.Click += (_, _) => { if (_book.Records.LastOrDefault() is { } saved) { Fill(saved); serial.Clear(); serial.Focus(); } };
             back.Click += (_, _) => dialog.Close();
@@ -812,13 +823,13 @@ internal sealed class CollectorForm : Form
                     if (duplicate) PlayDriveNotification(DriveNotification.Duplicate);
                     var action = Review(record, duplicate);
                     if (action == "Serial") { serial.Focus(); serial.SelectAll(); return; }
-                    if (action == "Cancel") { dialog.Close(); return; }
+                    if (action == "Cancel") return;
                     if (action == "Edit") return;
                     var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); PlayDriveNotification(DriveNotification.Saved);
                     MessageBox.Show(dialog, $"Drive saved as row {row}.", "Drive Recorded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     copy.Enabled = true;
                     serial.Clear();
-                    if (action == "Save") { make.Clear(); model.Clear(); amount.Clear(); unit.SelectedIndex = 0; customUnit.Clear(); type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray()); type.SelectedIndex = 0; customType.Clear(); dialog.Text = "Manual Drive Entry"; }
+                    if (action == "Save") { make.Clear(); model.Clear(); amount.Clear(); unit.SelectedIndex = 0; customUnit.Clear(); type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray()); type.SelectedIndex = 0; SizeTypeDropdown(); customType.Clear(); dialog.Text = "Manual Drive Entry"; }
                     else dialog.Text = "Manual Drive Entry – Copy Saved Drive";
                     serial.Focus();
                 }
@@ -833,7 +844,7 @@ internal sealed class CollectorForm : Form
                 var match = Regex.Match(record["Capacity"], @"^([0-9]+(?:\.[0-9]+)?)\s+(.+)$");
                 if (match.Success) { amount.Text = match.Groups[1].Value; var value = match.Groups[2].Value; if (unit.Items.Contains(value)) unit.SelectedItem = value; else { unit.SelectedItem = "Other"; customUnit.Text = value; } }
                 var media = record["Type"];
-                type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray());
+                type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray()); SizeTypeDropdown();
                 if (types.Contains(media, StringComparer.OrdinalIgnoreCase)) type.Text = media;
                 else { type.Text = "Other"; customType.Text = media; }
                 UpdateManualLayout();
@@ -845,12 +856,20 @@ internal sealed class CollectorForm : Form
     private string Review(DriveRecord record, bool duplicate)
     {
         using var dialog = new Form { Text = duplicate ? "Duplicate Serial Number" : "Review Manual Drive", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(490, 345), MaximizeBox = false, MinimizeBox = false };
-        var summary = new TextBox { Bounds = new Rectangle(20, 20, 450, 158), Multiline = true, ReadOnly = true, Font = new Font("Consolas", 11), Lines = [$"Make:     {record["Make"]}", $"Model:    {record["Model"]}", $"Serial:   {record["SerialNumber"]}", $"Capacity: {record["Capacity"]}", $"Type:     {record["Type"]}"] };
+        var summary = new TextBox { Bounds = new Rectangle(20, 20, 450, 158), Multiline = true, ReadOnly = true, TabStop = false, Font = new Font("Consolas", 11), Lines = [$"Make:     {record["Make"]}", $"Model:    {record["Model"]}", $"Serial:   {record["SerialNumber"]}", $"Capacity: {record["Capacity"]}", $"Type:     {record["Type"]}"] };
         var note = new Label { Text = duplicate ? "This serial is already in the workbook. Change it or cancel this record." : record["SerialNumber"] == "N/A" ? "Serial N/A cannot be checked for duplicates." : "Review these values before saving a new row.", Bounds = new Rectangle(20, 188, 450, 48) };
         dialog.Controls.AddRange([summary, note]); string action = "Edit";
-        void Choice(string name, string text, int x, int width) { var button = Button(text, x, 272, width); button.Click += (_, _) => { action = name; dialog.Close(); }; dialog.Controls.Add(button); }
-        if (duplicate) { Choice("Serial", "Change Serial", 20, 140); Choice("Cancel", "Cancel Record", 180, 140); }
-        else { Choice("Save", "Save & Next", 14, 105); Choice("Copy", "Save & Copy", 125, 105); Choice("Edit", "Edit Fields", 236, 105); Choice("Cancel", "Cancel Record", 347, 128); }
+        dialog.Shown += (_, _) => summary.Select(0, 0);
+        Button Choice(string name, string text, int x, int width) { var button = Button(text, x, 272, width); button.Click += (_, _) => { action = name; dialog.Close(); }; dialog.Controls.Add(button); return button; }
+        if (duplicate) { Choice("Serial", "Change Serial", 118, 120); Choice("Cancel", "Cancel", 252, 120); }
+        else
+        {
+            Choice("Save", "Save", 20, 105);
+            var saveCopy = Choice("Copy", "Save & Copy", 135, 105);
+            _toolTip.SetToolTip(saveCopy, "Save this drive and copy its details with a new serial number.");
+            Choice("Edit", "Edit Fields", 250, 105);
+            Choice("Cancel", "Cancel", 365, 105);
+        }
         dialog.ShowDialog(this); return action;
     }
 }
