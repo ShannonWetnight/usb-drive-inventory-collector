@@ -46,7 +46,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _pause = new() { Text = "Pause Scanning", Width = 140 };
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
-    private readonly Button _sound = new() { Width = 36, Height = 34, Font = new Font("Segoe UI Emoji", 12), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
+    private readonly Button _sound = new() { Width = 36, Height = 34, Image = CreateSoundIcon(true), ImageAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
     private readonly Button _refreshWorkbook = new() { Image = CreateRefreshIcon(), ImageAlign = ContentAlignment.MiddleCenter, AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Visible = true };
@@ -84,7 +84,10 @@ internal sealed class CollectorForm : Form
         headerActions.Resize += (_, _) => PositionHeaderActions(); PositionHeaderActions();
         void UpdateSoundButton()
         {
-            _sound.Text = _soundsEnabled ? "🔊" : "🔇";
+            var oldIcon = _sound.Image;
+            _sound.Image = CreateSoundIcon(_soundsEnabled);
+            oldIcon?.Dispose();
+            _sound.Text = string.Empty;
             _sound.AccessibleName = _soundsEnabled ? "Mute Sounds" : "Enable Sounds";
             _toolTip.SetToolTip(_sound, _soundsEnabled ? "Mute drive notification sounds" : "Enable drive notification sounds");
         }
@@ -228,6 +231,29 @@ internal sealed class CollectorForm : Form
         graphics.DrawArc(pen, 2.5f, 2.5f, 11f, 11f, 45f, 285f);
         using var arrow = new SolidBrush(Color.FromArgb(25, 40, 55));
         graphics.FillPolygon(arrow, [new PointF(14, 5), new PointF(10, 3), new PointF(11, 8)]);
+        return icon;
+    }
+    private static Bitmap CreateSoundIcon(bool enabled)
+    {
+        var icon = new Bitmap(20, 20);
+        using var graphics = Graphics.FromImage(icon);
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        graphics.Clear(Color.Transparent);
+        using var fill = new SolidBrush(Color.White);
+        using var pen = new Pen(Color.White, 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var speaker = new GraphicsPath();
+        speaker.AddPolygon([new PointF(2, 7), new PointF(6, 7), new PointF(11, 3), new PointF(11, 17), new PointF(6, 13), new PointF(2, 13)]);
+        graphics.FillPath(fill, speaker);
+        if (enabled)
+        {
+            graphics.DrawArc(pen, 8, 5, 8, 10, -65, 130);
+            graphics.DrawArc(pen, 8, 2, 10, 16, -60, 120);
+        }
+        else
+        {
+            graphics.DrawLine(pen, 13, 7, 18, 13);
+            graphics.DrawLine(pen, 18, 7, 13, 13);
+        }
         return icon;
     }
     private void SetScanningPaused(bool paused)
