@@ -111,7 +111,7 @@ This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB 
 ## Setup
 
 1. Download the repository and extract it into a folder.
-2. Double-click `Launch USB Drive Inventory Collector.cmd` and approve the administrator prompt. Keep the launcher beside the two PowerShell scripts.
+2. Double-click `Launch USB Drive Inventory Collector.cmd`, choose `[G]` for the GUI or `[C]` for the console, and approve the administrator prompt. Press `[Enter]` to choose the GUI by default. Keep the launcher beside the two PowerShell scripts.
 3. If Windows or your organization's PowerShell policy blocks the script, follow the approved process for running local scripts. The launcher does not change execution policy.
 
 To start from an elevated PowerShell session, run:
@@ -157,7 +157,7 @@ Output\
 
 ### Windows GUI (v4.0.0)
 
-To launch it by double-clicking, open `Launch USB Drive Inventory Collector.cmd`. It requests administrator access through Windows and starts the GUI. A PowerShell console window may also open while the collector is running. Keep the launcher and both PowerShell scripts together in the same folder. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
+To launch by double-clicking, open `Launch USB Drive Inventory Collector.cmd`. Select `[G]` or press `[Enter]` for the GUI, `[C]` for the console, or `[Q]` to quit. The launcher requests administrator access through Windows. The selection window closes after launch; GUI mode hides its PowerShell host and leaves the GUI visible, while console mode keeps the PowerShell window visible. Keep the launcher and both PowerShell scripts together. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
 
 You can also launch the GUI from an elevated STA PowerShell window:
 
