@@ -1,0 +1,23 @@
+name: Build native Windows GUI preview
+on:
+  push:
+    branches: [feature/native-windows-gui]
+  workflow_dispatch:
+  pull_request:
+jobs:
+  windows-gui:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish self-contained executable
+        run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: USB-Drive-Inventory-Collector-Windows-preview
+          path: publish/USB-Drive-Inventory-Collector.exe
+          if-no-files-found: error
