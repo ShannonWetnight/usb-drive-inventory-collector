@@ -22,7 +22,6 @@
     + [Parameters](#parameters)
 - [Limitations](#limitations)
 - [Roadmap](#roadmap)
-- [Tests](#tests)
 - [License](#license)
 
 ## Overview
@@ -307,10 +306,6 @@ The defaults are enough for normal use. Both entry points accept paths and polli
 ## Roadmap
 
 - Investigate safe recovery for USB adapters that stop responding. Restarting a shared controller could interrupt unrelated devices, so the current collector reports the timeout and waits for the adapter to be reconnected.
-
-## Tests
-
-Run `pwsh -NoProfile -File tests/Collector.Tests.ps1` and `pwsh -NoProfile -File tests/GUI.Tests.ps1` (or use `powershell` on Windows). These tests load functions without accessing attached drives. They cover classification, workbook round trips, setup, manual validation, and an asynchronous scan with a simulated disk. The Windows Forms interface still needs a real Windows workstation and USB adapter for final UI testing.
 
 ## License
 
