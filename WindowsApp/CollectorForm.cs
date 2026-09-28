@@ -10,7 +10,7 @@ internal sealed class CollectorForm : Form
     private enum StatusTone { Default, Reading, Success }
     private InventoryBook _book;
     private readonly AutoPlayGuard _autoPlay = new();
-    private readonly string _logPath;
+    private string _logPath;
     private DriveProbe? _probe;
     private readonly HashSet<int> _connected = [];
     private readonly CancellationTokenSource _closing = new();
@@ -50,10 +50,9 @@ internal sealed class CollectorForm : Form
         KeyPreview = true;
         MinimumSize = new Size(900, 590); Size = new Size(1030, 720); StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10); BackColor = Color.FromArgb(246, 248, 251);
-        var output = Path.Combine(AppContext.BaseDirectory, "Output");
-        Directory.CreateDirectory(Path.Combine(output, "Logs"));
+        Directory.CreateDirectory(CollectorSettings.LogsDirectory());
         _book = new InventoryBook(CollectorSettings.WorkbookPath());
-        _logPath = Path.Combine(output, "Logs", $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        _logPath = Path.Combine(CollectorSettings.LogsDirectory(), $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         foreach (var height in new[] { 82f, 56f, 72f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
@@ -459,19 +458,20 @@ internal sealed class CollectorForm : Form
     private void Setup()
     {
         if (_busy) { MessageBox.Show(this, "Wait for the current drive read to finish before changing Workbook Setup.", "Workbook Setup"); return; }
+        if (_terminalSession is not null) { MessageBox.Show(this, "Disable Terminal before changing Workbook Setup.", "Workbook Setup"); return; }
         _modal = true;
         try
         {
             using var dialog = new Form { Text = "Workbook Setup", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(550, 620), MaximizeBox = false, MinimizeBox = false };
             var intro = new Label { Text = "Default columns: Make, Model, Serial Number, Reported Capacity, Type.\nSelect extra identity fields to save for each drive:", Bounds = new Rectangle(20, 12, 510, 55) };
-            var list = new CheckedListBox { CheckOnClick = true, Bounds = new Rectangle(20, 75, 510, 320) };
+            var list = new CheckedListBox { CheckOnClick = true, Bounds = new Rectangle(20, 70, 510, 265) };
             var optional = InventoryBook.Catalog.Select(c => c.Key).Except(InventoryBook.Core).ToList();
             foreach (var key in optional) list.Items.Add(InventoryBook.Header(key), _book.Columns.Contains(key));
-            var note = new Label { Text = "Older and manual records receive N/A for extra fields. A backup keeps any fields removed from the active workbook.", Bounds = new Rectangle(20, 402, 510, 45) };
-            var locationLabel = new Label { Text = "Workbook Save Location", Bounds = new Rectangle(20, 456, 270, 24), Font = new Font(Font, FontStyle.Bold) };
+            var note = new Label { Text = "Older and manual records receive N/A for extra fields. A backup keeps any fields removed from the active workbook.", Bounds = new Rectangle(20, 342, 510, 43) };
+            var locationLabel = new Label { Text = "Workbook Save Location", Bounds = new Rectangle(20, 392, 270, 24), Font = new Font(Font, FontStyle.Bold) };
             var location = new TextBox { Text = _book.Path, ReadOnly = true };
-            var locationFrame = CenteredField(location, new Rectangle(20, 484, 397, 28));
-            var browse = Button("Browse...", 425, 484, 105); browse.Height = 28;
+            var locationFrame = CenteredField(location, new Rectangle(20, 418, 397, 28));
+            var browse = Button("Browse...", 425, 418, 105); browse.Height = 28;
             browse.Click += (_, _) =>
             {
                 using var pick = new SaveFileDialog { Title = "Workbook Save Location", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = "xlsx", AddExtension = true, OverwritePrompt = false, FileName = Path.GetFileName(location.Text), InitialDirectory = Path.GetDirectoryName(location.Text) };
@@ -490,6 +490,15 @@ internal sealed class CollectorForm : Form
                 }
                 catch (Exception ex) { MessageBox.Show(dialog, "That workbook could not be opened: " + ex.Message, "Workbook Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             };
+            var logsLabel = new Label { Text = "Logs Save Location", Bounds = new Rectangle(20, 462, 270, 24), Font = new Font(Font, FontStyle.Bold) };
+            var logsLocation = new TextBox { Text = CollectorSettings.LogsDirectory(), ReadOnly = true };
+            var logsFrame = CenteredField(logsLocation, new Rectangle(20, 488, 397, 28));
+            var browseLogs = Button("Browse...", 425, 488, 105); browseLogs.Height = 28;
+            browseLogs.Click += (_, _) =>
+            {
+                using var pick = new FolderBrowserDialog { Description = "Choose where collector logs are saved", SelectedPath = logsLocation.Text, ShowNewFolderButton = true };
+                if (pick.ShowDialog(dialog) == DialogResult.OK) logsLocation.Text = pick.SelectedPath;
+            };
             var all = Button("Select All", 20, 558, 112); var defaults = Button("Defaults", 153, 558, 112); var apply = Button("Apply", 286, 558, 112); var cancel = Button("Cancel", 419, 558, 112);
             all.Click += (_, _) => { for (var i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
             defaults.Click += (_, _) => { for (var i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
@@ -501,13 +510,22 @@ internal sealed class CollectorForm : Form
                 {
                     var selected = _book.AtLocation(location.Text);
                     if (!chosen.SequenceEqual(selected.Columns)) selected.ChangeColumns(chosen);
-                    CollectorSettings.SaveWorkbookPath(selected.Path);
+                    var targetLogs = Path.GetFullPath(logsLocation.Text);
+                    Directory.CreateDirectory(targetLogs);
+                    var newLogPath = Path.Combine(targetLogs, Path.GetFileName(_logPath));
+                    if (!string.Equals(newLogPath, _logPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (File.Exists(newLogPath)) throw new IOException("A log with this name already exists in the selected folder.");
+                        if (File.Exists(_logPath)) File.Move(_logPath, newLogPath);
+                        _logPath = newLogPath;
+                    }
+                    CollectorSettings.SavePaths(selected.Path, targetLogs);
                     _book = selected;
                     RefreshGrid(); Activity("Workbook Setup applied."); dialog.Close();
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, "Setup was not applied: " + ex.Message); }
             };
-            dialog.Controls.AddRange([intro, list, note, locationLabel, locationFrame, browse, all, defaults, apply, cancel]);
+            dialog.Controls.AddRange([intro, list, note, locationLabel, locationFrame, browse, logsLabel, logsFrame, browseLogs, all, defaults, apply, cancel]);
             dialog.ShowDialog(this);
         }
         finally { _modal = false; }
