@@ -62,7 +62,7 @@ internal sealed class CollectorForm : Form
         _logPath = Path.Combine(CollectorSettings.LogsDirectory(), $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var height in new[] { 82f, 56f, 96f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        foreach (var height in new[] { 82f, 56f, 112f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         Controls.Add(layout);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78) };
@@ -109,7 +109,7 @@ internal sealed class CollectorForm : Form
         _finish.Width = _setup.Width;
         foreach (var b in new[] { _pause, _manual, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
-        var status = new Panel { Dock = DockStyle.Fill };
+        var status = new Panel { Dock = DockStyle.Fill, Margin = new Padding(12, 4, 12, 4), BorderStyle = BorderStyle.Fixed3D, BackColor = Color.FromArgb(246, 248, 251) };
         _status.Dock = DockStyle.None; _guidance.Dock = DockStyle.None;
         _guidance.Padding = Padding.Empty; _guidance.TextAlign = ContentAlignment.MiddleLeft;
         status.Controls.Add(_status); status.Controls.Add(_guidance);
@@ -184,7 +184,8 @@ internal sealed class CollectorForm : Form
         _resetView.Click += (_, _) => ResetRecordView();
         _refreshWorkbook.Click += (_, _) => ReloadWorkbook();
         _toolTip.SetToolTip(_refreshWorkbook, "Refresh Workbook from disk");
-        _grid.ColumnWidthChanged += (_, _) => MarkViewChanged();
+        _grid.ColumnWidthChanged += (_, _) => { EnsureHeaderHeight(); MarkViewChanged(); };
+        _grid.ColumnHeadersHeightChanged += (_, _) => { EnsureHeaderHeight(); MarkViewChanged(); };
         _grid.ColumnDisplayIndexChanged += (_, _) => MarkViewChanged();
         _grid.RowHeightChanged += (_, _) => MarkViewChanged();
         _grid.Sorted += (_, _) => MarkViewChanged();
@@ -441,7 +442,7 @@ internal sealed class CollectorForm : Form
             var disks = await Task.Run(DriveProbe.Disks, _closing.Token);
             if (_closing.IsCancellationRequested) return;
             var numbers = disks.Select(d => d.Number).ToHashSet();
-            foreach (var old in _connected.Where(n => !numbers.Contains(n)).ToList()) { _connected.Remove(old); Activity($"Disk {old} removed. Ready for another drive."); }
+            foreach (var old in _connected.Where(n => !numbers.Contains(n)).ToList()) { _connected.Remove(old); _probe.Forget(old); Activity($"Disk {old} removed. Ready for another drive."); }
             var disk = disks.FirstOrDefault(d => !_connected.Contains(d.Number));
             if (disk is null) return;
             _connected.Add(disk.Number);
@@ -472,16 +473,21 @@ internal sealed class CollectorForm : Form
             var sortKey = preserveSort ? _grid.SortedColumn?.Name : null;
             var sortOrder = _grid.SortOrder;
             _grid.Columns.Clear();
+            _grid.ColumnHeadersHeight = 34;
+            _grid.RowTemplate.Height = MinimumRowHeight();
+            _grid.RowTemplate.MinimumHeight = _grid.RowTemplate.Height;
             _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(48, 76, 102);
             _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
             _grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 76, 102);
             _grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
+            _grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, ValueType = typeof(int), SortMode = DataGridViewColumnSortMode.Automatic });
             foreach (var key in _book.Columns)
             {
                 var width = key switch { "Make" => 160, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };
                 _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = key, HeaderText = InventoryBook.Header(key), Width = width, MinimumWidth = 100, SortMode = DataGridViewColumnSortMode.Automatic });
             }
+            EnsureHeaderHeight();
             _grid.Rows.Clear();
             for (var index = 0; index < _book.Records.Count; index++)
             {
@@ -496,6 +502,20 @@ internal sealed class CollectorForm : Form
             _viewChanged = sortKey is not null;
         }
         finally { _updatingGrid = wasUpdating; if (!wasUpdating) UpdateResetViewButton(); }
+    }
+    private int MinimumRowHeight()
+        => Math.Max(26, TextRenderer.MeasureText("Ag", _grid.DefaultCellStyle.Font ?? _grid.Font).Height + 8);
+    private void EnsureHeaderHeight()
+    {
+        var font = _grid.ColumnHeadersDefaultCellStyle.Font ?? _grid.Font;
+        var minimum = 34;
+        foreach (DataGridViewColumn column in _grid.Columns)
+        {
+            var availableWidth = Math.Max(24, column.Width - 28);
+            var textHeight = TextRenderer.MeasureText(column.HeaderText, font, new Size(availableWidth, 1000), TextFormatFlags.WordBreak).Height;
+            minimum = Math.Max(minimum, textHeight + 10);
+        }
+        if (_grid.ColumnHeadersHeight < minimum) _grid.ColumnHeadersHeight = minimum;
     }
     private void ResetRecordView()
     {
@@ -551,16 +571,36 @@ internal sealed class CollectorForm : Form
     }
     private void ShowVersionInformation()
     {
-        using var dialog = new Form { Text = "Version Information", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.Sizable, ClientSize = new Size(700, 350), MinimumSize = new Size(520, 300) };
-        var info = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, TabStop = false, WordWrap = false, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
-            $"USB Drive Inventory Collector v{Application.ProductVersion}", "Maintainer: Shannon Wetnight",
+        using var dialog = new Form { Text = "Version Information", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.Sizable, ClientSize = new Size(700, 380), MinimumSize = new Size(520, 320) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(16, 12, 16, 12) };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        var title = new Label { Text = $"USB Drive Inventory Collector v{Application.ProductVersion}", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 10, FontStyle.Bold) };
+        var maintainer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        maintainer.Controls.Add(new Label { Text = "Maintainer: Shannon Wetnight |", AutoSize = true, Font = new Font("Consolas", 10), Margin = new Padding(0, 4, 7, 0) });
+        var website = new LinkLabel { Text = "shannonwetnight.com", AutoSize = true, Font = new Font("Consolas", 10), Margin = new Padding(0, 4, 0, 0) };
+        maintainer.Controls.Add(website);
+        var info = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, DetectUrls = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
             "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector",
             $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}",
-            "Scope: USB physical drives; boot and system disks excluded",
+            "Scope: USB physical drives with media; boot and system disks excluded",
             "Transport: smartctl autodetection plus USB adapter fallbacks",
             "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process",
             "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))] };
-        dialog.Controls.Add(info);
+        var disclaimer = new Label { Text = "AI Workflow Notice: This project was written through AI prompting and reviewed by its maintainer. Check collected data against the drive label when accuracy matters.", Dock = DockStyle.Fill, ForeColor = Color.DimGray, Font = new Font("Segoe UI", 9), Padding = new Padding(0, 7, 0, 0) };
+        void OpenLink(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
+            try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
+            catch (Exception ex) { MessageBox.Show(dialog, ex.Message, "Open Link", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        }
+        website.LinkClicked += (_, _) => OpenLink("https://shannonwetnight.com");
+        info.LinkClicked += (_, e) => OpenLink(e.LinkText);
+        layout.Controls.Add(title, 0, 0); layout.Controls.Add(maintainer, 0, 1); layout.Controls.Add(info, 0, 2); layout.Controls.Add(disclaimer, 0, 3);
+        dialog.Controls.Add(layout);
         dialog.Shown += (_, _) => info.Select(0, 0);
         dialog.ShowDialog(this);
     }
@@ -596,6 +636,7 @@ internal sealed class CollectorForm : Form
             updated.OpenOrCreate();
             _book = updated;
             RefreshGrid();
+            foreach (var old in _connected) _probe?.Forget(old);
             _connected.Clear();
             try { foreach (var disk in DriveProbe.Disks()) _connected.Add(disk.Number); } catch (Exception ex) { Log(ex.ToString()); }
             Activity(_paused ? "Terminal closed. Workbook reloaded. Scanning is paused." : "Terminal closed. Workbook reloaded.");
@@ -833,7 +874,6 @@ internal sealed class CollectorForm : Form
                     var action = Review(record, duplicate);
                     if (action == "Serial") { serial.Focus(); serial.SelectAll(); return; }
                     if (action == "Cancel") return;
-                    if (action == "Edit") return;
                     var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); PlayDriveNotification(DriveNotification.Saved);
                     MessageBox.Show(dialog, $"Drive saved as row {row}.", "Drive Recorded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     copy.Enabled = true;
@@ -867,17 +907,16 @@ internal sealed class CollectorForm : Form
         using var dialog = new Form { Text = duplicate ? "Duplicate Serial Number" : "Review Manual Drive", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(490, 345), MaximizeBox = false, MinimizeBox = false };
         var summary = new TextBox { Bounds = new Rectangle(20, 20, 450, 158), Multiline = true, ReadOnly = true, TabStop = false, Font = new Font("Consolas", 11), Lines = [$"Make:     {record["Make"]}", $"Model:    {record["Model"]}", $"Serial:   {record["SerialNumber"]}", $"Capacity: {record["Capacity"]}", $"Type:     {record["Type"]}"] };
         var note = new Label { Text = duplicate ? "This serial is already in the workbook. Change it or cancel this record." : record["SerialNumber"] == "N/A" ? "Serial N/A cannot be checked for duplicates." : "Review these values before saving a new row.", Bounds = new Rectangle(20, 188, 450, 48) };
-        dialog.Controls.AddRange([summary, note]); string action = "Edit";
+        dialog.Controls.AddRange([summary, note]); string action = "Cancel";
         dialog.Shown += (_, _) => summary.Select(0, 0);
         Button Choice(string name, string text, int x, int width) { var button = Button(text, x, 272, width); button.Click += (_, _) => { action = name; dialog.Close(); }; dialog.Controls.Add(button); return button; }
         if (duplicate) { Choice("Serial", "Change Serial", 118, 120); Choice("Cancel", "Cancel", 252, 120); }
         else
         {
-            Choice("Save", "Save", 20, 105);
-            var saveCopy = Choice("Copy", "Save & Copy", 135, 105);
+            Choice("Save", "Save", 20, 142);
+            var saveCopy = Choice("Copy", "Save & Copy", 174, 142);
             _toolTip.SetToolTip(saveCopy, "Save this drive and copy its details with a new serial number.");
-            Choice("Edit", "Edit Fields", 250, 105);
-            Choice("Cancel", "Cancel", 365, 105);
+            dialog.CancelButton = Choice("Cancel", "Cancel", 328, 142);
         }
         dialog.ShowDialog(this); return action;
     }

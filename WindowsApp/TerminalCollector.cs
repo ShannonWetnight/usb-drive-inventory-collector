@@ -92,7 +92,7 @@ internal sealed class TerminalCollector
                 {
                     var disks = DriveProbe.Disks();
                     var present = disks.Select(d => d.Number).ToHashSet();
-                    foreach (var old in _connected.Where(n => !present.Contains(n)).ToList()) { _connected.Remove(old); Write($"Disk {old} removed. Ready for the next drive."); }
+                    foreach (var old in _connected.Where(n => !present.Contains(n)).ToList()) { _connected.Remove(old); _probe.Forget(old); Write($"Disk {old} removed. Ready for the next drive."); }
                     foreach (var disk in disks.Where(d => !_connected.Contains(d.Number)))
                     {
                         _connected.Add(disk.Number);
