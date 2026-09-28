@@ -1,7 +1,7 @@
-name: Build native Windows GUI preview
+name: Build Windows GUI
 on:
   push:
-    branches: [feature/native-windows-gui]
+    branches: [main]
   workflow_dispatch:
   pull_request:
 jobs:
