@@ -433,7 +433,7 @@ internal static class ManualValidation
     {
         make = make.Trim(); model = model.Trim(); serial = serial.Trim(); amount = amount.Trim(); unit = unit.Trim(); customUnit = customUnit.Trim(); type = type.Trim(); customType = customType.Trim();
         Check(make, @"\A[A-Za-z0-9][A-Za-z0-9 .&()+'/_-]{0,79}\z", 80, "Make");
-        Check(model, @"\A[A-Za-z0-9][A-Za-z0-9 .+/_-]{0,99}\z", 100, "Model");
+        Check(model, "\\A[A-Za-z0-9][A-Za-z0-9 .+/_\"-]{0,99}\\z", 100, "Model");
         Check(serial, @"\A[A-Za-z0-9][A-Za-z0-9./_-]{0,99}\z", 100, "Serial");
         string capacity = "N/A";
         if (amount.Length > 0)
