@@ -13,12 +13,19 @@ foreach ($Assembly in @('System.IO.Compression','System.IO.Compression.FileSyste
         throw "GUI startup does not load required assembly $Assembly."
     }
 }
-$LauncherPath = Join-Path $Root 'Launch USB Drive Inventory Collector.vbs'
+$LauncherPath = Join-Path $Root 'Launch USB Drive Inventory Collector.cmd'
 if (-not (Test-Path -LiteralPath $LauncherPath)) { throw 'Double-click launcher is missing.' }
 $LauncherSource = Get-Content -LiteralPath $LauncherPath -Raw
-if ($LauncherSource -notmatch '(?s)ShellExecute .*"runas"') { throw 'Launcher does not request elevation.' }
-if ($LauncherSource -notmatch '(?s)ShellExecute .*"runas".*,\s*1\s*$') {
-    throw 'Launcher must show the elevated PowerShell process normally.'
+if ($LauncherSource -notmatch 'Start-Process.+-Verb RunAs') { throw 'Launcher does not request elevation.' }
+if ($LauncherSource -notmatch 'USB-Drive-Inventory-Collector-GUI\.ps1') { throw 'Launcher does not use adjacent GUI script.' }
+if ($LauncherSource -notmatch 'USB-Drive-Inventory-Collector\.ps1') { throw 'Launcher does not offer adjacent console script.' }
+if ($LauncherSource -notmatch 'Start-Process.+-Verb RunAs -WindowStyle Hidden') { throw 'GUI launcher must hide the PowerShell host.' }
+if ($LauncherSource -notmatch '(?m)^:console\s*$') { throw 'Launcher does not offer console mode.' }
+if ($LauncherSource -match '(?i)-ExecutionPolicy\s+Bypass|-[Ee]ncoded[Cc]ommand') {
+    throw 'Launcher must not bypass policy or encode commands.'
+}
+if (Test-Path -LiteralPath (Join-Path $Root 'Launch USB Drive Inventory Collector.vbs')) {
+    throw 'Flagged VBS launcher must be removed.'
 }
 $ConsoleFunctions = @($ConsoleAst.FindAll({ param($Node) $Node -is [Management.Automation.Language.FunctionDefinitionAst] },$false))
 foreach ($Function in $ConsoleFunctions) { Invoke-Expression $Function.Extent.Text }
