@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -47,7 +48,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _sound = new() { Width = 36, Height = 34, Font = new Font("Segoe UI Emoji", 12), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
-    private readonly Button _refreshWorkbook = new() { Text = "↻", AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Font = new Font("Segoe UI Symbol", 15), Visible = true };
+    private readonly Button _refreshWorkbook = new() { Image = CreateRefreshIcon(), ImageAlign = ContentAlignment.MiddleCenter, AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Visible = true };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
     public CollectorForm()
     {
@@ -97,7 +98,7 @@ internal sealed class CollectorForm : Form
         {
             var width = Math.Max(1, header.ClientSize.Width - headerActions.Width - 28);
             title.SetBounds(20, 7, width, 37);
-            subtitle.SetBounds(20, 40, width, 25);
+            subtitle.SetBounds(22, 40, width - 2, 25);
         };
         layout.Controls.Add(header, 0, 0);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 10, 0, 0) };
@@ -112,11 +113,11 @@ internal sealed class CollectorForm : Form
         {
             var width = Math.Max(1, status.ClientSize.Width - 44);
             var measured = TextRenderer.MeasureText(_status.Text, _status.Font, new Size(width, 1000), TextFormatFlags.WordBreak);
-            var statusHeight = Math.Clamp(measured.Height + 4, 28, 66);
-            const int guidanceHeight = 26, gap = 4;
+            var statusHeight = Math.Clamp(measured.Height, 24, 70);
+            const int guidanceHeight = 24, gap = 2;
             var top = Math.Max(0, (status.ClientSize.Height - statusHeight - gap - guidanceHeight) / 2);
             _status.SetBounds(22, top, width, statusHeight);
-            _guidance.SetBounds(22, top + statusHeight + gap, width, guidanceHeight);
+            _guidance.SetBounds(20, top + statusHeight + gap, width + 2, guidanceHeight);
         }
         status.Resize += (_, _) => PositionStatus();
         _status.TextChanged += (_, _) => PositionStatus();
@@ -217,6 +218,17 @@ internal sealed class CollectorForm : Form
         FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _successDisplay.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
+    private static Bitmap CreateRefreshIcon()
+    {
+        var icon = new Bitmap(16, 16);
+        using var graphics = Graphics.FromImage(icon);
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var pen = new Pen(Color.FromArgb(25, 40, 55), 1.8f);
+        graphics.DrawArc(pen, 2.5f, 2.5f, 11f, 11f, 45f, 285f);
+        using var arrow = new SolidBrush(Color.FromArgb(25, 40, 55));
+        graphics.FillPolygon(arrow, [new PointF(14, 5), new PointF(10, 3), new PointF(11, 8)]);
+        return icon;
+    }
     private void SetScanningPaused(bool paused)
     {
         _paused = paused;
