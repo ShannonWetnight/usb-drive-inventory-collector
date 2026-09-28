@@ -5,9 +5,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>4.2.4</Version>
+    <Version>4.2.5</Version>
     <AssemblyName>USB-Drive-Inventory-Collector-v$(Version)</AssemblyName>
-    <FileVersion>4.2.4.0</FileVersion>
+    <FileVersion>4.2.5.0</FileVersion>
     <Product>USB Drive Inventory Collector</Product>
     <Authors>Shannon Wetnight</Authors>
     <RepositoryUrl>https://github.com/ShannonWetnight/usb-drive-inventory-collector</RepositoryUrl>
