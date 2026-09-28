@@ -31,7 +31,7 @@
 
 ## Download and Run
 
-The next tagged version is **4.2.3**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.3.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.2.4**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.4.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -39,7 +39,7 @@ Connect one drive at a time and wait for the result before removing it. Keep the
 
 ## Interfaces
 
-The executable opens the graphical interface by default. Select the **Terminal** tab, then choose **Enable Terminal** beside the tab to start the terminal workflow. The toggle reads **Disable Terminal** while active. GUI scanning pauses while Terminal runs; after Terminal closes, the workbook reloads and GUI scanning resumes unless scanning was paused. Switching tabs leaves Terminal running. The **Pause Scanning** control and Terminal `[P]` command share the same pause state.
+The executable opens the graphical interface by default. Select the **Terminal** tab, then choose **Enable Terminal** beside the tab to start the terminal workflow. The toggle reads **Disable Terminal** while active and remains available when switching tabs. GUI scanning pauses while Terminal runs; after Terminal closes, the workbook reloads and GUI scanning resumes unless scanning was paused. The **Pause Scanning** control and Terminal `[P]` command share the same pause state.
 
 ### Graphical Interface
 
@@ -51,11 +51,11 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Manual Drive Entry** | Opens the form to enter and review a drive record. |
 | **Workbook Setup** | Selects optional identity columns and the workbook save location. |
 | **Terminal** tab | Shows the embedded terminal panel, initially disabled. |
-| **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab while Terminal is selected. |
+| **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab when selected and remains visible while Terminal is running. |
 | **Version Information** | Opens the app version and technical details from the banner. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
-| **Finish** | Closes the collector. |
+| **Finish** | Shows the saved workbook path with Copy Path, Open Folder, and Close controls. |
 | Double-click a recorded row | Edits that saved record, including after sorting. |
 
 Drive types can be searched in the manual-entry list. Choose **Other** to enter a custom type. **Copy Last Drive** is available inside Manual Drive Entry.
@@ -67,7 +67,7 @@ Select the **Terminal** tab, then **Enable Terminal** to start the console-style
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.2.3.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.2.4.exe' --terminal
 ```
 
 ### Terminal Keys
