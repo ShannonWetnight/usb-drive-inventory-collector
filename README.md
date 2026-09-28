@@ -27,10 +27,11 @@
 - Includes both graphical and terminal interfaces in the same executable.
 - Offers to disable AutoPlay for the session and restores its previous setting when the collector exits normally.
 - Shows recorded drives and activity, and lets you edit a saved row by double-clicking it.
+- Displays a record number in the app without adding a column to the workbook.
 
 ## Download and Run
 
-The next tagged version is **4.2.2**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.2.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.2.3**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.3.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -38,7 +39,7 @@ Connect one drive at a time and wait for the result before removing it. Keep the
 
 ## Interfaces
 
-The executable opens the graphical interface by default. Use the **Terminal** button to switch to the terminal workflow inside the same window. While Terminal is open, GUI scanning pauses; it resumes after Terminal closes and the workbook reloads. Switching to another tab does not close Terminal.
+The executable opens the graphical interface by default. Select the **Terminal** tab, then choose **Enable Terminal** beside the tab to start the terminal workflow. The toggle reads **Disable Terminal** while active. GUI scanning pauses while Terminal runs; after Terminal closes, the workbook reloads and GUI scanning resumes unless scanning was paused. Switching tabs leaves Terminal running. The **Pause Scanning** control and Terminal `[P]` command share the same pause state.
 
 ### Graphical Interface
 
@@ -49,23 +50,24 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Pause Scanning** | Stops automatic drive checks until you resume scanning. |
 | **Manual Drive Entry** | Opens the form to enter and review a drive record. |
 | **Workbook Setup** | Selects optional identity columns and the workbook save location. |
-| **Terminal** | Opens the terminal workflow in the main window. |
+| **Terminal** tab | Shows the embedded terminal panel, initially disabled. |
+| **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab while Terminal is selected. |
 | **Version Information** | Opens the app version and technical details from the banner. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
 | **Finish** | Closes the collector. |
-| Double-click a recorded row | Edits that saved record. |
+| Double-click a recorded row | Edits that saved record, including after sorting. |
 
 Drive types can be searched in the manual-entry list. Choose **Other** to enter a custom type. **Copy Last Drive** is available inside Manual Drive Entry.
 
 ### Terminal Interface
 
-Select the **Terminal** tab or **Open Terminal** to start the console-style workflow. Press a command key while scanning. For prompts, type a response in the input box and press Enter or select **Send**. Prompts, manual entry, workbook setup, and scan results appear in the output area. Select **Close Terminal** to return to automatic GUI scanning.
+Select the **Terminal** tab, then **Enable Terminal** to start the console-style workflow. Press a command key while scanning. For prompts, type a response in the input box and press Enter or select **Send**. Prompts, manual entry, workbook setup, and scan results appear in the output area. Select **Disable Terminal** to return to GUI scanning.
 
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.2.2.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.2.3.exe' --terminal
 ```
 
 ### Terminal Keys
