@@ -25,7 +25,7 @@
 - [License](#license)
 
 ## Overview
-USB Drive Inventory Collector is a Windows PowerShell utility for recording drive identity from USB adapters or manual entry. Version 4.0.0 includes a Windows GUI and keeps the console script available. Both write the same local `.xlsx` workbook format and create a diagnostic log for each run.
+USB Drive Inventory Collector is a Windows PowerShell utility for recording drive identity from USB adapters or manual entry. Version 4.0.0 offers a GUI and a console mode in the same PowerShell script. Both modes write the same local `.xlsx` workbook and create a diagnostic log for each run.
 
 It is useful anywhere you need a repeatable drive inventory: asset tracking, intake, audits, lab work, recycling preparation, or general hardware records. It does not erase, format, partition, or otherwise modify the attached drive.
 
@@ -110,16 +110,18 @@ This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB 
 ## Setup
 
 1. Download the repository and extract it into a folder.
-2. Double-click `Launch USB Drive Inventory Collector.cmd`, choose `[G]` for the GUI or `[C]` for the console, and approve the administrator prompt. Press `[Enter]` to choose the GUI by default. Keep the launcher beside the two PowerShell scripts.
+2. Double-click `Launch USB Drive Inventory Collector.cmd`, choose `[G]` for the GUI or `[C]` for the console, and approve the administrator prompt. Press `[Enter]` to choose the GUI by default. Keep the launcher beside the PowerShell script.
 3. If Windows or your organization's PowerShell policy blocks the script, follow the approved process for running local scripts. The launcher does not change execution policy.
 
 To start from an elevated PowerShell session, run:
 
 ```powershell
-.\USB-Drive-Inventory-Collector-GUI.ps1
+.\USB-Drive-Inventory-Collector.ps1
 ```
 
-To use the console workflow, start `USB-Drive-Inventory-Collector.ps1` instead.
+For the console workflow, run `USB-Drive-Inventory-Collector.ps1 -Mode CLI`.
+
+The `.cmd` file is a double-click entry point. Both modes live in the single `.ps1` file.
 
 No output folders need to be created manually.
 
@@ -139,11 +141,11 @@ Restoration runs during normal exit, including `Ctrl+C` and handled errors. If P
 
 ## Output
 
-The default layout is created beside the scripts:
+The default layout is created beside the collector script:
 
 ```text
+Launch USB Drive Inventory Collector.cmd
 USB-Drive-Inventory-Collector.ps1
-USB-Drive-Inventory-Collector-GUI.ps1
 Output\
   Inventory.xlsx
   Logs\
@@ -156,13 +158,13 @@ Output\
 
 ### Windows GUI (v4.0.0)
 
-To launch by double-clicking, open `Launch USB Drive Inventory Collector.cmd`. Select `[G]` or press `[Enter]` for the GUI, `[C]` for the console, or `[Q]` to quit. The launcher requests administrator access through Windows. The selection window closes after launch; GUI mode hides its PowerShell host and leaves the GUI visible, while console mode keeps the PowerShell window visible. Keep the launcher and both PowerShell scripts together. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
+To launch by double-clicking, open `Launch USB Drive Inventory Collector.cmd`. Select `[G]` or press `[Enter]` for the GUI, `[C]` for the console, or `[Q]` to quit. The launcher requests administrator access through Windows. The selection window closes after launch. In GUI mode, PowerShell stays visible during startup, then its console hides once the GUI opens. Startup errors remain visible in the PowerShell window. Console mode leaves that window open. Keep the launcher beside the collector script. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
 
 You can also launch the GUI from an elevated STA PowerShell window:
 
 ```powershell
-powershell.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector-GUI.ps1
-# Or: pwsh.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector-GUI.ps1
+powershell.exe -STA -NoProfile -File .\USB-Drive-Inventory-Collector.ps1
+# Console mode: powershell.exe -NoProfile -File .\USB-Drive-Inventory-Collector.ps1 -Mode CLI
 ```
 
 It starts scanning after startup, and the status line reports detection, saving, duplicates, removals, and read errors. **Recorded drives** shows existing rows and selected workbook columns; **Activity** shows recent events; **Details** shows paths, smartctl version, settings, and the selected columns. The debug log on disk keeps the full probe history.
@@ -171,15 +173,15 @@ Use **Pause scanning** to stop new scans; a probe already running will finish. *
 
 The GUI runs drive probes in a background PowerShell runspace, so slow smartctl calls do not block the controls. Manual entry and setup can be opened during a probe; the result is processed after the dialog closes. The collector handles one newly inserted disk per scan and requires removal before retrying a disk that failed to read.
 
-The GUI uses the drive classification, smartctl transport fallbacks, direct XLSX writer, logging, and AutoPlay restoration functions in the adjacent console script. Keep both files together. Windows Forms adds no Excel dependency or separate GUI package.
+Both modes share the same drive detection, direct XLSX writer, logging, and AutoPlay restoration functions in `USB-Drive-Inventory-Collector.ps1`. Windows Forms adds no Excel dependency or separate GUI package.
 
 ### Microsoft Defender reports
 
-Microsoft Defender flagged the GitHub source ZIP on September 27, 2026, and a direct download of `Launch USB Drive Inventory Collector.vbs` on September 28 as `Trojan:Script/Wacatac.H!ml`. The individual-file alert identifies the VBS launcher as the affected file. The VBS launcher has been replaced with a readable CMD launcher; this change has not yet been confirmed to resolve Defender's detection. Do not restore a quarantined copy or add a Defender exclusion. If a fresh download is still flagged, submit the exact detected file to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission).
+Microsoft Defender flagged an earlier GitHub source ZIP on September 27, 2026, and the VBS launcher on September 28 as `Trojan:Script/Wacatac.H!ml`. The VBS launcher has been removed. After the repository tests and `.gitignore` were removed, the maintainer reported a clean download of the source ZIP on their machine. A new detection should be submitted with the exact affected file to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission).
 
 ### Console workflow
 
-1. Start the script in an elevated PowerShell window.
+1. Start `USB-Drive-Inventory-Collector.ps1 -Mode CLI` in an elevated PowerShell window.
 2. Answer the AutoPlay prompt if it appears.
 3. Connect a drive through a USB adapter or enclosure.
 4. Wait for the drive to be recorded.
@@ -191,11 +193,11 @@ The waiting screen shows the version, maintainer, repository link, and a numbere
 
 ### Workbook column setup
 
-In the GUI, click **Workbook setup**. In the console, press `[S]` while waiting. To configure columns before any connected drive is probed, start either entry point with `-SetupOnStartup`:
+In the GUI, click **Workbook setup**. In the console, press `[S]` while waiting. To configure columns before any connected drive is probed, start either mode with `-SetupOnStartup`:
 
 ```powershell
-.\USB-Drive-Inventory-Collector-GUI.ps1 -SetupOnStartup
-# Or: .\USB-Drive-Inventory-Collector.ps1 -SetupOnStartup
+.\USB-Drive-Inventory-Collector.ps1 -SetupOnStartup
+# Console mode: .\USB-Drive-Inventory-Collector.ps1 -Mode CLI -SetupOnStartup
 ```
 
 The five default columns stay in place. You can add Interface, Firmware Version, Model Family, Form Factor, Rotation Rate (RPM), Capacity (Bytes), Logical and Physical Sector Sizes, ATA Version, SATA Version, Reported Protocol, and Probe Transport. These values come from the identity query already used by the collector. Setup does not run SMART health tests or collect every vendor-specific attribute.
@@ -208,7 +210,7 @@ Use a separate output workbook for a different collection layout. Unsupported or
 
 ### Manual drive entry
 
-Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
+Press `M` while the collector is polling to enter a drive manually. If your PowerShell host does not support direct console keys, start the script with `-Mode CLI -ManualEntryOnStartup` instead. A key pressed during a drive probe is handled when the script returns to the polling loop.
 
 The form asks for Make, Model, Serial Number, a numeric capacity and unit, and drive type. Capacity accepts positive whole numbers and decimals, such as `0.005`; enter the unit on the next screen. Capacity units include `B`, `KB`, `MB`, `GB`, `TB`, `PB`, and **Other**, which lets you enter a custom unit. Drive types have numbered choices grouped under **Standard**, **Enterprise**, and **Other**, sorted within each group; the final **Other** choice accepts a custom type. The form accepts plain letters, digits, spaces, and limited punctuation. Leading and trailing spaces are removed; Model and serial are converted to uppercase, while Make keeps the case you enter. For example, an amount of `2` with unit `TB` is saved as `2 TB`. Press Enter (or enter only spaces) to save `N/A` for a field. Skipping either the capacity number or unit saves the capacity as `N/A`.
 
@@ -265,7 +267,7 @@ If a drive read or workbook update fails, the console prints the path to that ru
 
 ### Parameters
 
-The defaults are enough for normal use. Both entry points accept paths and polling settings:
+The defaults are enough for normal use. Both modes accept paths and polling settings:
 
 ```powershell
 .\USB-Drive-Inventory-Collector.ps1 `
@@ -277,6 +279,7 @@ The defaults are enough for normal use. Both entry points accept paths and polli
 
 | Parameter | Purpose |
 | --- | --- |
+| `Mode` | Selects `GUI` (default) or `CLI`. The launcher prompts for this choice. |
 | `OutputPath` | Overrides the default `Output\Inventory.xlsx` path. |
 | `LogPath` | Overrides the default timestamped log path. |
 | `UsbDevicePattern` | Filters Windows USB disk friendly names. Default is `*`. |
