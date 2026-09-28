@@ -6,6 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>USB-Drive-Inventory-Collector</AssemblyName>
+    <Version>4.0.0</Version>
+    <FileVersion>4.0.0.0</FileVersion>
+    <Product>USB Drive Inventory Collector</Product>
+    <Authors>Shannon Wetnight</Authors>
+    <RepositoryUrl>https://github.com/ShannonWetnight/usb-drive-inventory-collector</RepositoryUrl>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
