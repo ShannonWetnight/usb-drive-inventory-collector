@@ -6,7 +6,7 @@ USB Drive Inventory Collector records the identity of USB-connected physical dri
 
 ## Choose an interface
 
-- **Native Windows GUI (4.0 preview):** The Windows Forms application in [WindowsApp](WindowsApp/README.md) builds into a double-clickable `USB-Drive-Inventory-Collector.exe`. It does not launch PowerShell and does not require changing PowerShell execution policy. This is an unsigned, unreleased preview; Windows and Microsoft Defender testing is still in progress.
+- **Native Windows GUI (4.0 preview):** The Windows Forms application in [WindowsApp](WindowsApp/README.md) builds into a double-clickable `USB-Drive-Inventory-Collector.exe`. It does not launch PowerShell and does not require changing PowerShell execution policy. This is an unsigned preview for the upcoming 4.0.0 release.
 - **Legacy console collector:** [USB-Drive-Inventory-Collector.ps1](USB-Drive-Inventory-Collector.ps1) remains available for an elevated PowerShell session where script execution is allowed. It is independent of the GUI.
 
 The two collectors write the same five default workbook columns: Make, Model, Serial Number, Reported Capacity, and Type. Both can add optional identity columns and write directly to XLSX without Excel.
@@ -17,7 +17,7 @@ Download the artifact from a successful **Build native Windows GUI** run in [pul
 
 Insert one drive at a time. **Recorded drives** shows saved records, **Activity** shows progress and errors, and **Technical details** shows the workbook and log paths. **Manual entry** records a drive by hand; **Copy last** starts a new record with the prior drive's information and asks for a new serial. **Workbook setup** selects optional identity columns and backs up the workbook before changing its layout. **Pause scanning** and **Finish** control the session. The app can offer to disable AutoPlay temporarily for the signed-in desktop user and restore its previous setting on normal exit.
 
-The GUI saves `Output/Inventory.xlsx` and a timestamped log under `Output/Logs/` beside the EXE. Keep the workbook closed while collecting so the app can replace it on each save. This build has not yet been tested on the maintainer's USB adapters or cleared against the reported Defender detection. See [WindowsApp/README.md](WindowsApp/README.md) for the preview build command and validation checklist.
+The GUI saves `Output/Inventory.xlsx` and a timestamped log under `Output/Logs/` beside the EXE. Keep the workbook closed while collecting so the app can replace it on each save. The maintainer has confirmed that the EXE launches on Windows. Check drive identification and workbook behavior with representative media before publishing. See [WindowsApp/README.md](WindowsApp/README.md) for the build command and validation steps.
 
 ## Legacy console
 
