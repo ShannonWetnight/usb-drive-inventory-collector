@@ -175,10 +175,6 @@ The GUI runs drive probes in a background PowerShell runspace, so slow smartctl 
 
 Both modes share the same drive detection, direct XLSX writer, logging, and AutoPlay restoration functions in `USB-Drive-Inventory-Collector.ps1`. Windows Forms adds no Excel dependency or separate GUI package.
 
-### Microsoft Defender reports
-
-Microsoft Defender flagged an earlier GitHub source ZIP on September 27, 2026, and the VBS launcher on September 28 as `Trojan:Script/Wacatac.H!ml`. The VBS launcher has been removed. After the repository tests and `.gitignore` were removed, the maintainer reported a clean download of the source ZIP on their machine. A new detection should be submitted with the exact affected file to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission).
-
 ### Console workflow
 
 1. Start `USB-Drive-Inventory-Collector.ps1 -Mode CLI` in an elevated PowerShell window.
