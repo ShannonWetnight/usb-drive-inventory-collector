@@ -12,7 +12,7 @@ internal sealed class DriveProbe
     private readonly string _smartctl;
     private readonly Action<string> _log;
     private readonly Dictionary<int, string> _preferred = [];
-    private static readonly string[] Fallbacks = ["auto", "sat", "sntjmicron", "sntjmicron/sat", "sntrealtek", "sntrealtek/sat", "sntasmedia", "sntasmedia/sat", "usbjmicron", "usbprolific", "usbsunplus", "usbcypress"];
+    private static readonly string[] Fallbacks = ["auto", "sat", "sat,12", "sntjmicron", "sntjmicron/sat", "sntrealtek", "sntrealtek/sat", "sntasmedia", "sntasmedia/sat", "usbjmicron", "usbprolific", "usbsunplus", "usbcypress"];
     public DriveProbe(string smartctl, Action<string> log) { _smartctl = smartctl; _log = log; }
     public static string? FindSmartctl()
     {
@@ -65,7 +65,7 @@ internal sealed class DriveProbe
         catch (Exception ex) { _log("scan-open discovery failed: " + ex.Message); }
         foreach (var item in Fallbacks) Add(item);
         DriveRecord? fallback = null;
-        var lastError = "No supported transport returned usable media identity.";
+        var outcomes = new Dictionary<string, string>();
         for (int cycle = 0; cycle < 2; cycle++)
         {
             foreach (var transport in transports)
@@ -78,13 +78,17 @@ internal sealed class DriveProbe
                 {
                     _log($"identity disk={disk.Number} cycle={cycle + 1} transport={transport}");
                     var result = await RunAsync(args, ct);
-                    if (string.IsNullOrWhiteSpace(result.Output)) { lastError = "smartctl returned no output."; continue; }
+                    _log($"identity disk={disk.Number} transport={transport} exitCode={result.Code} stdoutChars={result.Output.Length} stderrChars={result.Error.Length}");
+                    if (string.IsNullOrWhiteSpace(result.Output)) { outcomes[transport] = "no output"; continue; }
                     using var doc = JsonDocument.Parse(result.Output);
                     var root = doc.RootElement;
                     var model = Prop(root, "model_name"); var serial = Prop(root, "serial_number");
                     var capacityBytes = Prop(root, "user_capacity", "bytes");
                     var capacity = Capacity(capacityBytes);
-                    if ((model == "N/A" && serial == "N/A") || capacity == "N/A") { lastError = $"No usable identity via {transport}."; continue; }
+                    var messages = root.TryGetProperty("smartctl", out var smart) && smart.TryGetProperty("messages", out var reported) && reported.ValueKind == JsonValueKind.Array
+                        ? string.Join(" | ", reported.EnumerateArray().Select(message => Prop(message, "string"))) : "";
+                    _log($"identity disk={disk.Number} transport={transport} modelPresent={model != "N/A"} serialPresent={serial != "N/A"} capacityPresent={capacity != "N/A"} messages={messages[..Math.Min(messages.Length, 500)]}");
+                    if ((model == "N/A" && serial == "N/A") || capacity == "N/A") { outcomes[transport] = "identity incomplete"; continue; }
                     var protocol = Prop(root, "device", "protocol");
                     var record = new DriveRecord {
                         ["Make"] = Make(model), ["Model"] = model, ["SerialNumber"] = serial,
@@ -100,15 +104,17 @@ internal sealed class DriveProbe
                     var generic = Regex.IsMatch(model, "^(SSK|USB|USB Device|External|Generic|Mass Storage|JMicron|ASMedia|Realtek|SCSI Disk Device)$", RegexOptions.IgnoreCase);
                     var bridge = generic || (model == disk.FriendlyName && serial == disk.SerialNumber && Regex.IsMatch(model, "SSK|USB|External|Generic|JMicron|ASMedia|Realtek", RegexOptions.IgnoreCase));
                     if (!bridge) fallback ??= record;
+                    else outcomes[transport] = "bridge identity only";
                 }
                 catch (TimeoutException) { throw; }
                 catch (OperationCanceledException) { throw; }
-                catch (Exception ex) { lastError = ex.Message; _log($"identity disk={disk.Number} transport={transport}: {ex}"); }
+                catch (Exception ex) { outcomes[transport] = ex is JsonException ? "invalid JSON" : ex.Message; _log($"identity disk={disk.Number} transport={transport}: {ex}"); }
             }
             if (fallback is not null) return fallback;
             if (cycle == 0) await Task.Delay(1250, ct);
         }
-        throw new IOException($"Unable to read media identity from {device}. {lastError}");
+        _log($"identity disk={disk.Number} exhausted transports: " + string.Join(", ", outcomes.Select(pair => $"{pair.Key} ({pair.Value})")));
+        throw new IOException($"Unable to read media identity from {device}. See the debug log for results by transport.");
     }
     private async Task<(int Code, string Output, string Error)> RunAsync(IEnumerable<string> arguments, CancellationToken ct)
     {
