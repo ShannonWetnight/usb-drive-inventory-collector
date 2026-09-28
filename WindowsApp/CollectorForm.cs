@@ -409,8 +409,8 @@ internal sealed class CollectorForm : Form
             foreach (var key in optional) list.Items.Add(InventoryBook.Header(key), _book.Columns.Contains(key));
             var note = new Label { Text = "Older and manual records receive N/A for extra fields. A backup keeps any fields removed from the active workbook.", Bounds = new Rectangle(20, 402, 510, 45) };
             var locationLabel = new Label { Text = "Workbook Save Location", Bounds = new Rectangle(20, 456, 270, 24), Font = new Font(Font, FontStyle.Bold) };
-            var location = new TextBox { Bounds = new Rectangle(20, 484, 397, 28), Text = _book.Path, ReadOnly = true };
-            var browse = Button("Browse...", 425, 482, 105);
+            var location = new TextBox { Bounds = new Rectangle(20, 484, 397, 28), AutoSize = false, Text = _book.Path, ReadOnly = true };
+            var browse = Button("Browse...", 425, 484, 105); browse.Height = 28;
             browse.Click += (_, _) =>
             {
                 using var pick = new SaveFileDialog { Title = "Workbook Save Location", Filter = "Excel Workbook (*.xlsx)|*.xlsx", DefaultExt = "xlsx", AddExtension = true, OverwritePrompt = false, FileName = Path.GetFileName(location.Text), InitialDirectory = Path.GetDirectoryName(location.Text) };
