@@ -39,7 +39,7 @@ internal sealed class AutoPlayGuard : IDisposable
         var ownSid = WindowsIdentity.GetCurrent().User;
         SecurityIdentifier? desktopSid = null;
         try { if (desktop is not null) desktopSid = (SecurityIdentifier)new NTAccount(desktop).Translate(typeof(SecurityIdentifier)); } catch { }
-        if (desktopSid is null || !desktopSid.Equals(ownSid)) return "AutoPlay prompt skipped: the signed-in desktop user differs from this account.";
+        if (desktopSid is null || ownSid is null || !desktopSid.Equals(ownSid)) return "AutoPlay prompt skipped: the signed-in desktop user differs from this account.";
         using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
         _keyExisted = key is not null;
         _hadValue = key?.GetValueNames().Contains("DisableAutoplay") ?? false;
