@@ -1,7 +1,12 @@
-name: Publish signed v4.0.0
+name: Publish Signed Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag, for example v4.1.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,6 +21,7 @@ jobs:
         shell: pwsh
         env:
           RELEASE_REF: ${{ github.ref }}
+          RELEASE_VERSION: ${{ inputs.version }}
           SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
           SIGNING_ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
           SIGNING_PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
@@ -24,10 +30,13 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           if ($env:RELEASE_REF -ne 'refs/heads/main') { throw 'Run the release workflow from main.' }
+          if ($env:RELEASE_VERSION -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Use a version like v4.1.0.' }
+          [xml]$project = Get-Content 'WindowsApp/USBDriveInventoryCollector.csproj'
+          if ($project.Project.PropertyGroup.Version -ne $env:RELEASE_VERSION.Substring(1)) { throw 'Release version does not match the application version.' }
           foreach ($name in @('SIGNING_ENDPOINT', 'SIGNING_ACCOUNT', 'SIGNING_PROFILE', 'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID')) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Missing release setting: $name" }
           }
-          if (-not (Test-Path '.github/release-notes/v4.0.0.md')) { throw 'Release notes are missing.' }
+          if (-not (Test-Path ".github/release-notes/$($env:RELEASE_VERSION).md")) { throw 'Release notes are missing.' }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
@@ -66,7 +75,8 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
           $exe = Join-Path $env:GITHUB_WORKSPACE 'publish/USB-Drive-Inventory-Collector.exe'
           $sums = Join-Path $env:GITHUB_WORKSPACE 'publish/SHA256SUMS.txt'
-          gh release create v4.0.0 "$exe" "$sums" --target "$env:GITHUB_SHA" --title 'USB Drive Inventory Collector v4.0.0' --notes-file '.github/release-notes/v4.0.0.md'
+          gh release create "$env:RELEASE_VERSION" "$exe" "$sums" --target "$env:GITHUB_SHA" --title "USB Drive Inventory Collector $env:RELEASE_VERSION" --notes-file ".github/release-notes/$($env:RELEASE_VERSION).md"
