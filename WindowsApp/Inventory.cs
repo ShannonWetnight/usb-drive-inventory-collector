@@ -43,7 +43,7 @@ internal sealed class InventoryBook
     private static readonly XNamespace DocRel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
     public InventoryBook(string path) { Path = path; }
-    public bool HasSerial(string serial) => serial != "N/A" && Records.Any(r => string.Equals(r["SerialNumber"], serial, StringComparison.OrdinalIgnoreCase));
+    public bool HasSerial(string serial, int? exceptIndex = null) => serial != "N/A" && Records.Where((_, i) => i != exceptIndex).Any(r => string.Equals(r["SerialNumber"], serial, StringComparison.OrdinalIgnoreCase));
     public void OpenOrCreate()
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
@@ -109,6 +109,26 @@ internal sealed class InventoryBook
         try { Save(); }
         catch { Records.RemoveAt(Records.Count - 1); throw; }
         return Records.Count + 1;
+    }
+    public void Update(int index, DriveRecord record)
+    {
+        if (index < 0 || index >= Records.Count) throw new ArgumentOutOfRangeException(nameof(index));
+        if (HasSerial(record["SerialNumber"], index)) throw new InvalidOperationException("This serial number is already in the workbook.");
+        var previous = Records[index];
+        Records[index] = record;
+        try { Save(); }
+        catch { Records[index] = previous; throw; }
+    }
+    public InventoryBook AtLocation(string destination)
+    {
+        destination = System.IO.Path.GetFullPath(destination);
+        if (string.Equals(destination, System.IO.Path.GetFullPath(Path), StringComparison.OrdinalIgnoreCase)) return this;
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination)!);
+        // Copy the current workbook when choosing a new path; never overwrite an existing workbook.
+        if (!File.Exists(destination)) File.Copy(Path, destination);
+        var book = new InventoryBook(destination);
+        book.OpenOrCreate();
+        return book;
     }
     public void ChangeColumns(List<string> selected)
     {

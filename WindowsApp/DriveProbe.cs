@@ -47,7 +47,7 @@ internal sealed class DriveProbe
         var transports = new List<string>();
         void Add(string? item) { if (!string.IsNullOrWhiteSpace(item) && !transports.Contains(item)) transports.Add(item); }
         if (_preferred.TryGetValue(disk.Number, out var preferred)) Add(preferred);
-        // As in the legacy collector, a stalled scan-open is a timeout for the entire attempt.
+        // A stalled scan-open is a timeout for the entire attempt.
         try
         {
             using var scan = JsonDocument.Parse((await RunAsync(["--scan-open", "-j"], ct)).Output);
