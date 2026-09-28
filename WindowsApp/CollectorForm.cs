@@ -31,7 +31,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
     public CollectorForm()
     {
-        Text = "USB Drive Inventory Collector 4.0 (native preview)";
+        Text = "USB Drive Inventory Collector v4.0.0";
         MinimumSize = new Size(900, 590); Size = new Size(1030, 720); StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 10); BackColor = Color.FromArgb(246, 248, 251);
         var output = Path.Combine(AppContext.BaseDirectory, "Output");
@@ -147,7 +147,7 @@ internal sealed class CollectorForm : Form
     private void RefreshDetails()
     {
         _footer.Text = $"Records: {_book.Records.Count}     Workbook: {_book.Path}";
-        _details.Lines = ["USB Drive Inventory Collector (native preview)", "Maintainer: Shannon Wetnight", "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector", $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}", "Scope: USB physical drives; boot and system disks excluded", "Transport: smartctl autodetection plus USB adapter fallbacks", "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process", "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))];
+        _details.Lines = ["USB Drive Inventory Collector v4.0.0", "Maintainer: Shannon Wetnight", "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector", $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}", "Scope: USB physical drives; boot and system disks excluded", "Transport: smartctl autodetection plus USB adapter fallbacks", "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process", "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))];
     }
     private void Setup()
     {
