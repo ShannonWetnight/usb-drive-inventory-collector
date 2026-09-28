@@ -6,9 +6,9 @@ USB Drive Inventory Collector records USB-connected physical drives in an XLSX w
 
 ## Download and run
 
-The [signed v4.0.0 release](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases/tag/v4.0.0) contains a self-contained Windows x64 EXE. Download `USB-Drive-Inventory-Collector.exe`, double-click it, and approve the administrator prompt. Microsoft Excel and a PowerShell execution policy change are not required.
+The [signed v4.1.0 release](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases/tag/v4.1.0) contains a self-contained Windows x64 EXE. Download `USB-Drive-Inventory-Collector.exe`, double-click it, and approve the administrator prompt. Microsoft Excel and a PowerShell execution policy change are not required.
 
-The current source is the v4.1.0 development build. It adds the Terminal interface and the workflow changes described below. Those changes are not in the v4.0.0 download until a later signed release is published.
+The current source is the v4.2.0 development build. Its EXE is named `USB Drive Inventory Collector.exe` and it adds the embedded Terminal and workbook shortcuts described below. These changes are not in the v4.1.0 download yet.
 
 Automatic drive reads require smartmontools (`smartctl.exe`). If it is missing, the app asks before installing it through WinGet. Insert one drive at a time and wait for its saved row before swapping drives. The app can offer to disable AutoPlay for the session and restore the previous setting on normal exit.
 
@@ -16,9 +16,9 @@ Automatic drive reads require smartmontools (`smartctl.exe`). If it is missing, 
 
 The GUI shows **Recorded Drives** and **Activity**. Double-click a recorded row to edit it. **Manual Drive Entry** lets you enter a drive, review it, and save it; **Copy Last Drive** is inside that window for batches that share a model and capacity. Drive types are searchable by name, with **Other** at the end for a custom type.
 
-Use **Workbook Setup** to select optional identity columns and choose a **Workbook Save Location**. Selecting a new path copies the current workbook there. Selecting an existing workbook switches to its records after confirmation. Column changes make a backup of the active workbook. **Pause Scanning** stops new reads, **Finish** ends the session, and the info button in the banner opens **Version Information**.
+Use **Workbook Setup** to select optional identity columns and choose a **Workbook Save Location**. Selecting a new path copies the current workbook there. Selecting an existing workbook switches to its records after confirmation. Column changes make a backup of the active workbook. **Pause Scanning** stops new reads, **Finish** ends the session, and **Version Information** in the banner shows the app version and technical details. The footer has **Copy Path** and **Open Folder** shortcuts for the active workbook.
 
-The **Terminal** button opens console mode from the same EXE. The GUI pauses scanning while Terminal is open, then reloads the workbook when it closes. Terminal also opens directly with `USB-Drive-Inventory-Collector.exe --terminal`. Its keys are `[M]` Manual Drive Entry, `[L]` Copy Last Drive, `[S]` Workbook Setup, `[P]` Pause Scanning, `[D]` Version Information, `[H]` Help, and `[Q]` Finish. Manual entries use the same validation and duplicate checks as the GUI.
+In v4.2.0, **Terminal** opens a tab in the main window. Type a command or answer in the input box and press Enter. The GUI pauses its scanner while Terminal runs, then reloads the workbook when you close Terminal. You can switch tabs without ending the Terminal session. The same EXE also supports a separate console with `& '.\USB Drive Inventory Collector.exe' --terminal`. Terminal commands are `[M]` Manual Drive Entry, `[L]` Copy Last Drive, `[S]` Workbook Setup, `[P]` Pause Scanning, `[D]` Version Information, `[H]` Help, and `[Q]` Finish. Manual entries use the same validation and duplicate checks as the GUI.
 
 The default workbook is `Output/Inventory.xlsx` beside the EXE. Session logs go in `Output/Logs/`. The chosen workbook location is remembered for the Windows account running the app. Keep the workbook closed in spreadsheet software while collecting so each save can replace the file.
 

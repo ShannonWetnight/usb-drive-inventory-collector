@@ -1,10 +1,13 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace USBDriveInventoryCollector;
 
 internal sealed class TerminalCollector
 {
+    private readonly ITerminalIO _io;
+    private readonly bool _embedded;
     private InventoryBook _book = new(CollectorSettings.WorkbookPath());
     private readonly AutoPlayGuard _autoPlay = new();
     private readonly HashSet<int> _connected = [];
@@ -14,20 +17,24 @@ internal sealed class TerminalCollector
     private bool _paused;
     private volatile bool _stop;
 
-    public static void Run() => new TerminalCollector().Start();
+    private TerminalCollector(ITerminalIO io, bool embedded) { _io = io; _embedded = embedded; }
+    public static void Run() => new TerminalCollector(new ConsoleTerminalIO(), false).Start();
+    public static TerminalCollector ForEmbedded(EmbeddedTerminalIO io) => new(io, true);
+    public void Stop() { _stop = true; if (_io is EmbeddedTerminalIO io) io.Close(); }
+    public void RunEmbedded() => Start();
 
     private void Start()
     {
         try
         {
             _book.OpenOrCreate();
-            Console.Title = "USB Drive Inventory Collector – Terminal";
-            Console.WriteLine("USB Drive Inventory Collector – Terminal");
-            Console.WriteLine("========================================");
-            Console.WriteLine($"Workbook: {_book.Path}");
-            Console.WriteLine($"Log: {_logPath}");
+            if (!_embedded) Console.Title = "USB Drive Inventory Collector – Terminal";
+            _io.WriteLine("USB Drive Inventory Collector – Terminal");
+            _io.WriteLine("========================================");
+            _io.WriteLine($"Workbook: {_book.Path}");
+            _io.WriteLine($"Log: {_logPath}");
             var smart = DriveProbe.FindSmartctl();
-            if (smart is null && Confirm("smartmontools is needed for automatic scanning. Install it with WinGet now?"))
+            if (smart is null && !_embedded && Confirm("smartmontools is needed for automatic scanning. Install it with WinGet now?"))
             {
                 using var install = Process.Start(new ProcessStartInfo("winget.exe") { UseShellExecute = false,
                     Arguments = "install --id smartmontools.smartmontools -e --source winget --accept-package-agreements --accept-source-agreements" });
@@ -41,18 +48,19 @@ internal sealed class TerminalCollector
                 try { _smartVersion = _probe.VersionAsync(CancellationToken.None).GetAwaiter().GetResult(); } catch (Exception ex) { Log(ex.ToString()); }
             }
             else Write("Automatic scanning is unavailable until smartmontools is installed. Manual Drive Entry is available.");
-            Write(_autoPlay.TryOffer(Confirm));
+            if (!_embedded) Write(_autoPlay.TryOffer(Confirm));
+            else Write("AutoPlay setting is managed by the main window.");
             Help();
-            Console.CancelKeyPress += OnCancel;
+            if (!_embedded) Console.CancelKeyPress += OnCancel;
             try { ScanLoop(); }
-            finally { Console.CancelKeyPress -= OnCancel; }
+            finally { if (!_embedded) Console.CancelKeyPress -= OnCancel; }
         }
         finally
         {
-            try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); Console.Error.WriteLine("AutoPlay could not be restored. Check Windows AutoPlay settings."); }
+            try { if (!_embedded) _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); _io.WriteLine("AutoPlay could not be restored. Check Windows AutoPlay settings."); }
             Write("Inventory collector stopped.");
-            Console.WriteLine($"Inventory: {_book.Path}\nLog: {_logPath}");
-            Console.Write("Press [Enter] to close Terminal."); Console.ReadLine();
+            _io.WriteLine($"Inventory: {_book.Path}\nLog: {_logPath}");
+            if (!_embedded) { _io.Write("Press [Enter] to close Terminal."); _io.ReadLine(); }
         }
     }
 
@@ -61,9 +69,9 @@ internal sealed class TerminalCollector
         Write("Waiting for a USB drive. Press [M] for manual entry.");
         while (!_stop)
         {
-            if (Console.KeyAvailable)
+            if (_io.KeyAvailable)
             {
-                var key = char.ToUpperInvariant(Console.ReadKey(true).KeyChar);
+                var key = char.ToUpperInvariant(_io.ReadKey());
                 if (key == 'Q') return;
                 if (key == 'M') ManualEntry(false);
                 else if (key == 'L') ManualEntry(true);
@@ -88,9 +96,9 @@ internal sealed class TerminalCollector
                             var record = _probe.IdentifyAsync(disk, CancellationToken.None).GetAwaiter().GetResult();
                             if (_book.HasSerial(record["SerialNumber"])) Write("This serial number is already in the workbook. No row added.");
                             else { var row = _book.Add(record); Recorded(record, row); }
-                            Console.WriteLine("Remove this drive and insert the next drive. Press [M] for manual entry.");
+                            _io.WriteLine("Remove this drive and insert the next drive. Press [M] for manual entry.");
                         }
-                        catch (Exception ex) { Write($"Disk {disk.Number} could not be read: {ex.Message}"); Log(ex.ToString()); Console.WriteLine("Remove and reinsert to retry, or press [M] for manual entry."); }
+                        catch (Exception ex) { Write($"Disk {disk.Number} could not be read: {ex.Message}"); Log(ex.ToString()); _io.WriteLine("Remove and reinsert to retry, or press [M] for manual entry."); }
                     }
                 }
                 catch (Exception ex) { Write("Scan error: " + ex.Message); Log(ex.ToString()); }
@@ -108,9 +116,9 @@ internal sealed class TerminalCollector
         var copy = copyLast;
         while (true)
         {
-            Console.Clear(); Console.WriteLine("MANUAL DRIVE ENTRY\n==================");
-            Console.WriteLine("Press [Enter] for N/A or type :cancel to return to scanning.\n");
-            if (copy) { Console.WriteLine($"Copying: {draft.Make} / {draft.Model} / {draft.Capacity} / {draft.Type}"); if (!Field("Serial Number", ref draft.Serial)) return; }
+            _io.Clear(); _io.WriteLine("MANUAL DRIVE ENTRY\n==================");
+            _io.WriteLine("Press [Enter] for N/A or type :cancel to return to scanning.\n");
+            if (copy) { _io.WriteLine($"Copying: {draft.Make} / {draft.Model} / {draft.Capacity} / {draft.Type}"); if (!Field("Serial Number", ref draft.Serial)) return; }
             else
             {
                 if (!Field("Step 1 of 5 – Make", ref draft.Make) || !Field("Step 2 of 5 – Model", ref draft.Model) ||
@@ -129,19 +137,19 @@ internal sealed class TerminalCollector
                         DriveTypes.Options.Contains(draft.Type, StringComparer.OrdinalIgnoreCase) ? draft.Type : "Other",
                         DriveTypes.Options.Contains(draft.Type, StringComparer.OrdinalIgnoreCase) ? "" : draft.Type);
                 }
-                catch (Exception ex) { Console.WriteLine(ex.Message); Console.Write("Edit a field [E] or cancel [C]: "); if (Console.ReadLine()?.Trim().Equals("E", StringComparison.OrdinalIgnoreCase) != true) return; if (!EditDraft(ref draft)) return; continue; }
-                Console.Clear(); Console.WriteLine("REVIEW MANUAL DRIVE\n==================="); Print(record);
+                catch (Exception ex) { _io.WriteLine(ex.Message); _io.Write("Edit a field [E] or cancel [C]: "); if (_io.ReadLine()?.Trim().Equals("E", StringComparison.OrdinalIgnoreCase) != true) return; if (!EditDraft(ref draft)) return; continue; }
+                _io.Clear(); _io.WriteLine("REVIEW MANUAL DRIVE\n==================="); Print(record);
                 var duplicate = _book.HasSerial(record["SerialNumber"]);
                 if (duplicate)
                 {
-                    Console.WriteLine("This serial number is already in the workbook.");
-                    Console.Write("Change serial [S] or cancel [C]: ");
-                    if (Console.ReadLine()?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) != true) return;
+                    _io.WriteLine("This serial number is already in the workbook.");
+                    _io.Write("Change serial [S] or cancel [C]: ");
+                    if (_io.ReadLine()?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) != true) return;
                     if (!Field("Serial Number", ref draft.Serial)) return;
                     continue;
                 }
-                Console.Write("Save and choose next [Y], save and copy [L], edit [E], or cancel [C]: ");
-                var action = Console.ReadLine()?.Trim().ToUpperInvariant();
+                _io.Write("Save and choose next [Y], save and copy [L], edit [E], or cancel [C]: ");
+                var action = _io.ReadLine()?.Trim().ToUpperInvariant();
                 if (action == "C" || action is null) return;
                 if (action == "E") { if (!EditDraft(ref draft)) return; continue; }
                 if (action != "Y" && action != "L") continue;
@@ -150,17 +158,17 @@ internal sealed class TerminalCollector
                 copy = action == "L";
                 draft = copy ? Draft.From(record) : new Draft();
                 if (copy) draft.Serial = "";
-                Console.Write("Press [Enter] for another drive, or [R] to return to scanning: ");
-                if (Console.ReadLine()?.Trim().Equals("R", StringComparison.OrdinalIgnoreCase) == true) return;
+                _io.Write("Press [Enter] for another drive, or [R] to return to scanning: ");
+                if (_io.ReadLine()?.Trim().Equals("R", StringComparison.OrdinalIgnoreCase) == true) return;
                 break;
             }
         }
     }
 
-    private static bool EditDraft(ref Draft draft)
+    private bool EditDraft(ref Draft draft)
     {
-        Console.Write("Edit Make [1], Model [2], Serial [3], Capacity [4], Type [5], or back [B]: ");
-        switch (Console.ReadLine()?.Trim())
+        _io.Write("Edit Make [1], Model [2], Serial [3], Capacity [4], Type [5], or back [B]: ");
+        switch (_io.ReadLine()?.Trim())
         {
             case "1": return Field("Make", ref draft.Make);
             case "2": return Field("Model", ref draft.Model);
@@ -171,17 +179,17 @@ internal sealed class TerminalCollector
         }
     }
 
-    private static bool Field(string label, ref string value)
+    private bool Field(string label, ref string value)
     {
-        Console.Write($"{label} (or :cancel): ");
-        var entry = Console.ReadLine();
+        _io.Write($"{label} (or :cancel): ");
+        var entry = _io.ReadLine();
         if (entry is null || entry.Trim().Equals(":cancel", StringComparison.OrdinalIgnoreCase)) return false;
         value = entry.Trim(); return true;
     }
-    private static bool Capacity(ref Draft draft)
+    private bool Capacity(ref Draft draft)
     {
-        Console.Write("Step 4 of 5 – Capacity (number only; unit next, [Enter] for N/A): ");
-        var amount = Console.ReadLine()?.Trim();
+        _io.Write("Step 4 of 5 – Capacity (number only; unit next, [Enter] for N/A): ");
+        var amount = _io.ReadLine()?.Trim();
         if (amount is null || amount.Equals(":cancel", StringComparison.OrdinalIgnoreCase)) return false;
         if (amount.Length == 0) { draft.Capacity = ""; return true; }
         var unit = Choose("Capacity Unit", ["B", "KB", "MB", "GB", "TB", "PB", "Other"]);
@@ -190,7 +198,7 @@ internal sealed class TerminalCollector
         if (selectedUnit == "Other" && !Field("Custom Capacity Unit", ref selectedUnit)) return false;
         draft.Capacity = amount + " " + selectedUnit; return true;
     }
-    private static bool Type(ref Draft draft)
+    private bool Type(ref Draft draft)
     {
         var type = Choose("Step 5 of 5 – Drive Type", DriveTypes.Options);
         if (type is null) return false;
@@ -198,16 +206,16 @@ internal sealed class TerminalCollector
         if (selectedType == "Other" && !Field("Custom Drive Type", ref selectedType)) return false;
         draft.Type = selectedType; return true;
     }
-    private static string? Choose(string label, IReadOnlyList<string> options)
+    private string? Choose(string label, IReadOnlyList<string> options)
     {
-        Console.WriteLine(label + ":");
-        for (var i = 0; i < options.Count; i++) Console.WriteLine($"  {i + 1}. {options[i]}");
+        _io.WriteLine(label + ":");
+        for (var i = 0; i < options.Count; i++) _io.WriteLine($"  {i + 1}. {options[i]}");
         while (true)
         {
-            Console.Write("Choose a number (or :cancel): "); var input = Console.ReadLine()?.Trim();
+            _io.Write("Choose a number (or :cancel): "); var input = _io.ReadLine()?.Trim();
             if (input is null || input.Equals(":cancel", StringComparison.OrdinalIgnoreCase)) return null;
             if (int.TryParse(input, out var n) && n >= 1 && n <= options.Count) return options[n - 1];
-            Console.WriteLine("Choose a listed number.");
+            _io.WriteLine("Choose a listed number.");
         }
     }
 
@@ -218,16 +226,16 @@ internal sealed class TerminalCollector
         var location = _book.Path;
         while (true)
         {
-            Console.Clear(); Console.WriteLine("WORKBOOK SETUP\n==============");
-            Console.WriteLine($"Workbook Save Location: {location}\n");
-            for (var i = 0; i < optional.Length; i++) Console.WriteLine($"{i + 1,2}. [{(selected.Contains(optional[i]) ? 'X' : ' ')}] {InventoryBook.Header(optional[i])}");
-            Console.Write("Toggle column number, location [L], defaults [D], apply [A], or cancel [C]: ");
-            var input = Console.ReadLine()?.Trim().ToUpperInvariant();
+            _io.Clear(); _io.WriteLine("WORKBOOK SETUP\n==============");
+            _io.WriteLine($"Workbook Save Location: {location}\n");
+            for (var i = 0; i < optional.Length; i++) _io.WriteLine($"{i + 1,2}. [{(selected.Contains(optional[i]) ? 'X' : ' ')}] {InventoryBook.Header(optional[i])}");
+            _io.Write("Toggle column number, location [L], defaults [D], apply [A], or cancel [C]: ");
+            var input = _io.ReadLine()?.Trim().ToUpperInvariant();
             if (input == "C" || input is null) return;
             if (input == "D") { selected = InventoryBook.Core.ToHashSet(); continue; }
             if (input == "L")
             {
-                Console.Write("Enter full .xlsx path (or :cancel): "); var next = Console.ReadLine()?.Trim().Trim('"');
+                _io.Write("Enter full .xlsx path (or :cancel): "); var next = _io.ReadLine()?.Trim().Trim('"');
                 if (string.IsNullOrWhiteSpace(next) || next.Equals(":cancel", StringComparison.OrdinalIgnoreCase)) continue;
                 if (!next.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)) { Write("Choose an .xlsx file."); continue; }
                 if (File.Exists(next) && !string.Equals(Path.GetFullPath(next), Path.GetFullPath(_book.Path), StringComparison.OrdinalIgnoreCase) && !Confirm("That workbook exists. Switch to its records?")) continue;
@@ -243,7 +251,7 @@ internal sealed class TerminalCollector
                     CollectorSettings.SaveWorkbookPath(next.Path); _book = next;
                     Write($"Workbook Setup saved: {_book.Path}"); return;
                 }
-                catch (Exception ex) { Write("Setup failed: " + ex.Message); Log(ex.ToString()); Console.ReadLine(); }
+                catch (Exception ex) { Write("Setup failed: " + ex.Message); Log(ex.ToString()); _io.ReadLine(); }
             }
             else if (int.TryParse(input, out var n) && n >= 1 && n <= optional.Length)
             { if (!selected.Add(optional[n - 1])) selected.Remove(optional[n - 1]); }
@@ -252,15 +260,15 @@ internal sealed class TerminalCollector
 
     private void Details()
     {
-        Console.Clear(); Console.WriteLine($"VERSION INFORMATION\n===================\nUSB Drive Inventory Collector v{Application.ProductVersion}\nMaintainer: Shannon Wetnight\nWorkbook: {_book.Path}\nLog: {_logPath}\nsmartctl: {_smartVersion}\nColumns: {string.Join(", ", _book.Columns.Select(InventoryBook.Header))}\n");
-        Console.Write("Press [Enter] to return."); Console.ReadLine();
+        _io.Clear(); _io.WriteLine($"VERSION INFORMATION\n===================\nUSB Drive Inventory Collector v{Application.ProductVersion}\nMaintainer: Shannon Wetnight\nWorkbook: {_book.Path}\nLog: {_logPath}\nsmartctl: {_smartVersion}\nColumns: {string.Join(", ", _book.Columns.Select(InventoryBook.Header))}\n");
+        _io.Write("Press [Enter] to return."); _io.ReadLine();
     }
-    private static bool Confirm(string message) { Console.Write($"{message} [Y/N]: "); return Console.ReadLine()?.Trim().Equals("Y", StringComparison.OrdinalIgnoreCase) == true; }
-    private static void Print(DriveRecord record)
-    { foreach (var key in InventoryBook.Core) Console.WriteLine($"{InventoryBook.Header(key),-20} {record[key]}"); }
+    private bool Confirm(string message) { _io.Write($"{message} [Y/N]: "); return _io.ReadLine()?.Trim().Equals("Y", StringComparison.OrdinalIgnoreCase) == true; }
+    private void Print(DriveRecord record)
+    { foreach (var key in InventoryBook.Core) _io.WriteLine($"{InventoryBook.Header(key),-20} {record[key]}"); }
     private void Recorded(DriveRecord record, int row) { Write($"Drive recorded as row {row}."); Print(record); }
-    private static void Help() => Console.WriteLine("Usage: [M] Manual Drive Entry  [L] Copy Last Drive  [S] Workbook Setup  [P] Pause Scanning  [D] Version Information  [H] Help  [Q] Finish");
-    private void Write(string text) { Console.WriteLine(text); Log(text); }
+    private void Help() => _io.WriteLine("Usage: [M] Manual Drive Entry  [L] Copy Last Drive  [S] Workbook Setup  [P] Pause Scanning  [D] Version Information  [H] Help  [Q] Finish");
+    private void Write(string text) { _io.WriteLine(text); Log(text); }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
 
     private sealed class Draft
