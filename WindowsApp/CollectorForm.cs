@@ -9,6 +9,7 @@ namespace USBDriveInventoryCollector;
 internal sealed class CollectorForm : Form
 {
     private enum StatusTone { Default, Reading, Success, Warning, Error }
+    private enum DriveNotification { Saved, Duplicate, Error }
     private InventoryBook _book;
     private readonly AutoPlayGuard _autoPlay = new();
     private string _logPath;
@@ -144,7 +145,7 @@ internal sealed class CollectorForm : Form
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
             _terminalToggle.Height = 28;
             _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
-            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 8, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
+            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 1, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
             _resetView.Location = new Point(_refreshWorkbook.Left - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
@@ -276,6 +277,18 @@ internal sealed class CollectorForm : Form
         }
         _status.Select(0, 0);
     }
+    private void PlayDriveNotification(DriveNotification notification)
+    {
+        if (!_soundsEnabled) return;
+        var sound = notification switch
+        {
+            DriveNotification.Saved => System.Media.SystemSounds.Asterisk,
+            DriveNotification.Duplicate => System.Media.SystemSounds.Exclamation,
+            DriveNotification.Error => System.Media.SystemSounds.Hand,
+            _ => System.Media.SystemSounds.Beep
+        };
+        sound.Play();
+    }
     private static async Task CopyWorkbookPathAsync(string path, Button button, IWin32Window owner)
     {
         try
@@ -404,15 +417,15 @@ internal sealed class CollectorForm : Form
             {
                 var record = await _probe.IdentifyAsync(disk, _closing.Token);
                 if (_closing.IsCancellationRequested) return;
-                if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; if (_soundsEnabled) System.Media.SystemSounds.Exclamation.Play(); }
-                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; if (_soundsEnabled) System.Media.SystemSounds.Asterisk.Play(); }
+                if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; PlayDriveNotification(DriveNotification.Duplicate); }
+                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; PlayDriveNotification(DriveNotification.Saved); }
                 _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
-            { Activity($"Disk {disk.Number} could not be read: {ex.Message}", "ERROR"); _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry."; _scanHoldUntil = DateTime.UtcNow.AddSeconds(3); Log(ex.ToString()); }
+            { Activity($"Disk {disk.Number} could not be read: {ex.Message}", "ERROR"); _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry."; PlayDriveNotification(DriveNotification.Error); _scanHoldUntil = DateTime.UtcNow.AddSeconds(3); Log(ex.ToString()); }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); Log(ex.ToString()); }
+        catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); PlayDriveNotification(DriveNotification.Error); Log(ex.ToString()); }
         finally { _busy = false; }
     }
     private void RefreshGrid(bool preserveSort = true)
@@ -703,6 +716,7 @@ internal sealed class CollectorForm : Form
                     _grid.ClearSelection();
                     foreach (DataGridViewRow row in _grid.Rows) if (row.Tag is int recordIndex && recordIndex == index) { row.Selected = true; _grid.FirstDisplayedScrollingRowIndex = row.Index; break; }
                     Activity($"Row {index + 2} updated: {candidate["Model"]} / {candidate["SerialNumber"]}", tone: StatusTone.Success);
+                    PlayDriveNotification(DriveNotification.Saved);
                     dialog.Close();
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, ex.Message, "Edit Recorded Drive", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
@@ -769,11 +783,12 @@ internal sealed class CollectorForm : Form
                     if (!types.Contains(choice, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Select a Drive Type from the list, or choose Other.");
                     var record = ManualValidation.Create(make.Text, model.Text, serial.Text, amount.Text, unit.Text == "N/A" ? "" : unit.Text, customUnit.Text, choice, customType.Text);
                     var duplicate = _book.HasSerial(record["SerialNumber"]);
+                    if (duplicate) PlayDriveNotification(DriveNotification.Duplicate);
                     var action = Review(record, duplicate);
                     if (action == "Serial") { serial.Focus(); serial.SelectAll(); return; }
                     if (action == "Cancel") { dialog.Close(); return; }
                     if (action == "Edit") return;
-                    var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success);
+                    var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); PlayDriveNotification(DriveNotification.Saved);
                     MessageBox.Show(dialog, $"Drive saved as row {row}.", "Drive Recorded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     copy.Enabled = true;
                     serial.Clear();
