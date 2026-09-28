@@ -12,6 +12,20 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--verify-workbook")
+        {
+            try
+            {
+                var book = new InventoryBook(args[1]);
+                book.OpenOrCreate();
+                var sample = new DriveRecord { ["Make"] = "Example", ["Model"] = "TEST-DRIVE", ["SerialNumber"] = "TEST-SERIAL", ["Capacity"] = "1 TB", ["Type"] = "SATA HDD" };
+                book.Add(sample);
+                var reopened = new InventoryBook(args[1]); reopened.OpenOrCreate();
+                if (reopened.Records.Count != 1 || reopened.Records[0]["SerialNumber"] != "TEST-SERIAL") throw new InvalidDataException("Workbook round trip failed.");
+            }
+            catch (Exception ex) { File.WriteAllText(args[1] + ".error.txt", ex.ToString()); Environment.ExitCode = 1; }
+            return;
+        }
         var oldMode = SetErrorMode(0x0001 | 0x8000);
         SetErrorMode(oldMode | 0x0001 | 0x8000);
         var terminal = args.Length == 1 && args[0].Equals("--terminal", StringComparison.OrdinalIgnoreCase);

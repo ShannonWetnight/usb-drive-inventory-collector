@@ -22,6 +22,23 @@ jobs:
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$($project.Project.PropertyGroup.Version)"
       - name: Publish self-contained executable
         run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
+      - name: Verify generated workbook
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'Collector-Workbook-Check.xlsx'
+          $exe = Join-Path (Resolve-Path publish) 'USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe'
+          $result = Start-Process -FilePath $exe -ArgumentList @('--verify-workbook', $path) -Wait -PassThru
+          if ($result.ExitCode -ne 0) {
+            if (Test-Path "$path.error.txt") { Get-Content "$path.error.txt" }
+            throw 'Workbook generation or round trip failed.'
+          }
+          python -m pip install --quiet openpyxl==3.1.5
+          python -c "from openpyxl import load_workbook; import sys; w=load_workbook(sys.argv[1]); assert w.active['C2'].value == 'TEST-SERIAL'" $path
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Workbook-Compatibility-Sample-v${{ steps.app-version.outputs.version }}
+          path: ${{ runner.temp }}/Collector-Workbook-Check.xlsx
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}-preview

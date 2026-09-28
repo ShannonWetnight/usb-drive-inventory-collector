@@ -10,6 +10,11 @@ internal static class CollectorSettings
 
     public static string DefaultWorkbookPath => Path.Combine(AppContext.BaseDirectory, "Output", "Inventory.xlsx");
     public static string DefaultLogsDirectory => Path.Combine(AppContext.BaseDirectory, "Output", "Logs");
+    public static bool SoundsEnabled()
+    {
+        try { return Load().SoundsEnabled ?? true; }
+        catch { return true; }
+    }
 
     public static string WorkbookPath()
     {
@@ -31,10 +36,16 @@ internal static class CollectorSettings
     }
 
     public static void SavePaths(string workbookPath, string logsDirectory)
+        => Save(new SettingsData { WorkbookPath = Path.GetFullPath(workbookPath), LogsDirectory = Path.GetFullPath(logsDirectory), SoundsEnabled = SoundsEnabled() });
+
+    public static void SaveSoundsEnabled(bool enabled)
+        => Save(new SettingsData { WorkbookPath = WorkbookPath(), LogsDirectory = LogsDirectory(), SoundsEnabled = enabled });
+
+    private static void Save(SettingsData settings)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         var temp = FilePath + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(new SettingsData { WorkbookPath = Path.GetFullPath(workbookPath), LogsDirectory = Path.GetFullPath(logsDirectory) }));
+        File.WriteAllText(temp, JsonSerializer.Serialize(settings));
         File.Move(temp, FilePath, true);
     }
 
@@ -44,5 +55,6 @@ internal static class CollectorSettings
     {
         public string? WorkbookPath { get; set; }
         public string? LogsDirectory { get; set; }
+        public bool? SoundsEnabled { get; set; }
     }
 }

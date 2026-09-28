@@ -33,7 +33,7 @@
 
 ## Download and Run
 
-The next tagged version is **4.2.8**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.8.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.2.9**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.9.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -55,6 +55,7 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Terminal** tab | Shows the embedded terminal panel, initially disabled. |
 | **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab when selected and remains visible while Terminal is running. |
 | **Version Information** | Opens the app version and technical details from the banner. |
+| Sound icon | Turns drive notification sounds on or off. The choice is saved for this Windows account. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
 | **Reset View** | Appears when the Recorded Drives view changes. Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
@@ -70,7 +71,7 @@ Select the **Terminal** tab, then **Enable Terminal** to start the console-style
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.2.8.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.2.9.exe' --terminal
 ```
 
 ### Terminal Keys
