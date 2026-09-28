@@ -3,6 +3,7 @@ on:
   push:
     branches: [feature/native-windows-gui]
   workflow_dispatch:
+  pull_request:
 jobs:
   windows-gui:
     runs-on: windows-latest
