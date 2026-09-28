@@ -6,18 +6,18 @@ USB Drive Inventory Collector records the identity of USB-connected physical dri
 
 ## Choose an interface
 
-- **Native Windows GUI (4.0 preview):** The Windows Forms application in [WindowsApp](WindowsApp/README.md) builds into a double-clickable `USB-Drive-Inventory-Collector.exe`. It does not launch PowerShell and does not require changing PowerShell execution policy. This is an unsigned preview for the upcoming 4.0.0 release.
+- **Native Windows GUI (4.0.0):** The Windows Forms application in [WindowsApp](WindowsApp/README.md) builds into a double-clickable `USB-Drive-Inventory-Collector.exe`. It does not launch PowerShell and does not require changing PowerShell execution policy. The official 4.0.0 download is signed for publisher Shannon Wetnight.
 - **Legacy console collector:** [USB-Drive-Inventory-Collector.ps1](USB-Drive-Inventory-Collector.ps1) remains available for an elevated PowerShell session where script execution is allowed. It is independent of the GUI.
 
 The two collectors write the same five default workbook columns: Make, Model, Serial Number, Reported Capacity, and Type. Both can add optional identity columns and write directly to XLSX without Excel.
 
-## Native GUI preview
+## Windows GUI
 
-Download the artifact from a successful **Build native Windows GUI** run in [pull request #6](https://github.com/ShannonWetnight/usb-drive-inventory-collector/pull/6), extract it, and double-click `USB-Drive-Inventory-Collector.exe`. Approve Windows' administrator prompt. The EXE is self-contained for Windows x64; automatic drive reads also require smartmontools' `smartctl.exe`. If smartmontools is missing, the application asks before installing it through WinGet.
+Download `USB-Drive-Inventory-Collector.exe` from the [v4.0.0 release](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases/tag/v4.0.0) and double-click it. Approve Windows' administrator prompt. The EXE is self-contained for Windows x64; automatic drive reads also require smartmontools' `smartctl.exe`. If smartmontools is missing, the application asks before installing it through WinGet.
 
 Insert one drive at a time. **Recorded drives** shows saved records, **Activity** shows progress and errors, and **Technical details** shows the workbook and log paths. **Manual entry** records a drive by hand; **Copy last** starts a new record with the prior drive's information and asks for a new serial. **Workbook setup** selects optional identity columns and backs up the workbook before changing its layout. **Pause scanning** and **Finish** control the session. The app can offer to disable AutoPlay temporarily for the signed-in desktop user and restore its previous setting on normal exit.
 
-The GUI saves `Output/Inventory.xlsx` and a timestamped log under `Output/Logs/` beside the EXE. Keep the workbook closed while collecting so the app can replace it on each save. The maintainer has confirmed that the EXE launches on Windows. Check drive identification and workbook behavior with representative media before publishing. See [WindowsApp/README.md](WindowsApp/README.md) for the build command and validation steps.
+The GUI saves `Output/Inventory.xlsx` and a timestamped log under `Output/Logs/` beside the EXE. Keep the workbook closed while collecting so the app can replace it on each save. See [WindowsApp/README.md](WindowsApp/README.md) for source build instructions.
 
 ## Legacy console
 
@@ -27,7 +27,7 @@ On Windows, open an elevated PowerShell session in the repository directory and 
 .\USB-Drive-Inventory-Collector.ps1
 ```
 
-The script needs Windows PowerShell 5.1 or later, administrator access, and smartmontools. It asks before using WinGet if smartmontools is missing. If local policy blocks scripts, use your organization's approved process; the native GUI preview is the double-click option.
+The script needs Windows PowerShell 5.1 or later, administrator access, and smartmontools. It asks before using WinGet if smartmontools is missing. If local policy blocks scripts, use your organization's approved process; the native GUI is the double-click option.
 
 While waiting for a drive, press `[M]` for manual entry, `[S]` for workbook setup, or `[D]` for technical details. Insert one USB drive at a time, wait for the saved row, remove it, and insert the next. Press `[Ctrl+C]` when finished. After a read error, remove and reinsert the drive to retry or enter it manually.
 
