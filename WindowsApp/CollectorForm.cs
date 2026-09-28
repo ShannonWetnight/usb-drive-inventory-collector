@@ -7,7 +7,7 @@ namespace USBDriveInventoryCollector;
 
 internal sealed class CollectorForm : Form
 {
-    private enum StatusTone { Default, Reading, Success }
+    private enum StatusTone { Default, Reading, Success, Warning, Error }
     private InventoryBook _book;
     private readonly AutoPlayGuard _autoPlay = new();
     private string _logPath;
@@ -15,9 +15,11 @@ internal sealed class CollectorForm : Form
     private readonly HashSet<int> _connected = [];
     private readonly CancellationTokenSource _closing = new();
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
-    private readonly System.Windows.Forms.Timer _readingPulse = new() { Interval = 700 };
-    private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 2400 };
-    private bool _readingPulseBright;
+    private readonly System.Windows.Forms.Timer _statusPulse = new() { Interval = 700 };
+    private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 3000 };
+    private bool _pulseBright, _soundsEnabled = CollectorSettings.SoundsEnabled();
+    private StatusTone _statusTone;
+    private DateTime _scanHoldUntil;
     private bool _busy, _paused, _modal, _updatingGrid, _viewChanged;
     private string _version = "N/A";
     private readonly RichTextBox _status = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.None, BackColor = Color.FromArgb(246, 248, 251), Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
@@ -42,6 +44,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _pause = new() { Text = "Pause Scanning", Width = 140 };
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
+    private readonly Button _sound = new() { Width = 36, Height = 34, Font = new Font("Segoe UI Emoji", 12), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
@@ -56,25 +59,47 @@ internal sealed class CollectorForm : Form
         _logPath = Path.Combine(CollectorSettings.LogsDirectory(), $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach (var height in new[] { 82f, 56f, 72f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+        foreach (var height in new[] { 82f, 56f, 96f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         Controls.Add(layout);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78) };
-        var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 8, 60, 0) };
-        var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), Dock = DockStyle.Fill, Padding = new Padding(22, 3, 0, 0) };
-        var info = new Button { Text = "Version Information", AccessibleName = "Version Information", Bounds = new Rectangle(0, 12, 160, 34), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), Font = new Font("Segoe UI", 9), TabStop = true };
+        var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft };
+        var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), Dock = DockStyle.Fill, Padding = new Padding(20, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft };
+        var info = new Button { Text = "Version Information", AccessibleName = "Version Information", Size = new Size(160, 34), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), Font = new Font("Segoe UI", 9), TextAlign = ContentAlignment.MiddleCenter, TabStop = true };
         info.Click += (_, _) => ShowVersionInformation();
         _toolTip.SetToolTip(info, "Version Information");
-        var headerActions = new Panel { Dock = DockStyle.Right, Width = 178, BackColor = header.BackColor };
-        headerActions.Controls.Add(info);
-        headerActions.Resize += (_, _) => info.Location = new Point((headerActions.ClientSize.Width - info.Width) / 2, (headerActions.ClientSize.Height - info.Height) / 2);
-        info.Location = new Point((headerActions.ClientSize.Width - info.Width) / 2, (headerActions.ClientSize.Height - info.Height) / 2);
+        _setup.Height = 34; _setup.FlatStyle = FlatStyle.Flat; _setup.ForeColor = Color.White; _setup.BackColor = Color.FromArgb(48, 76, 102); _setup.Font = new Font("Segoe UI", 9); _setup.TextAlign = ContentAlignment.MiddleCenter;
+        var headerActions = new Panel { Dock = DockStyle.Right, Width = 388, BackColor = header.BackColor };
+        headerActions.Controls.AddRange([_setup, info, _sound]);
+        void PositionHeaderActions()
+        {
+            var top = (headerActions.ClientSize.Height - 34) / 2;
+            _sound.Location = new Point(headerActions.ClientSize.Width - _sound.Width - 14, top);
+            info.Location = new Point(_sound.Left - info.Width - 8, top);
+            _setup.Location = new Point(info.Left - _setup.Width - 8, top);
+        }
+        headerActions.Resize += (_, _) => PositionHeaderActions(); PositionHeaderActions();
+        void UpdateSoundButton()
+        {
+            _sound.Text = _soundsEnabled ? "🔊" : "🔇";
+            _sound.AccessibleName = _soundsEnabled ? "Mute Sounds" : "Enable Sounds";
+            _toolTip.SetToolTip(_sound, _soundsEnabled ? "Mute drive notification sounds" : "Enable drive notification sounds");
+        }
+        UpdateSoundButton();
+        _sound.Click += (_, _) =>
+        {
+            try { CollectorSettings.SaveSoundsEnabled(!_soundsEnabled); _soundsEnabled = !_soundsEnabled; UpdateSoundButton(); }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Sound Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        };
         header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions); layout.Controls.Add(header, 0, 0);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 10, 0, 0) };
-        foreach (var b in new[] { _pause, _manual, _setup, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
+        _finish.Width = _setup.Width;
+        foreach (var b in new[] { _pause, _manual, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
         var status = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(22, 0, 0, 0) };
-        status.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); status.RowStyles.Add(new RowStyle(SizeType.Percent, 45)); status.Controls.Add(_status, 0, 0); status.Controls.Add(_guidance, 0, 1);
+        status.RowStyles.Add(new RowStyle(SizeType.Absolute, 55)); status.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _status.Margin = Padding.Empty; _guidance.Margin = Padding.Empty; _guidance.Padding = new Padding(3, 0, 0, 0); _guidance.TextAlign = ContentAlignment.MiddleLeft;
+        status.Controls.Add(_status, 0, 0); status.Controls.Add(_guidance, 0, 1);
         layout.Controls.Add(status, 0, 2);
         var recordsPage = new TabPage("Recorded Drives") { Controls = { _grid } };
         _tabs.TabPages.Add(recordsPage);
@@ -154,12 +179,10 @@ internal sealed class CollectorForm : Form
             }
         };
         _timer.Tick += async (_, _) => await PollAsync();
-        _readingPulse.Tick += (_, _) =>
+        _statusPulse.Tick += (_, _) =>
         {
-            _readingPulseBright = !_readingPulseBright;
-            _status.SelectAll();
-            _status.SelectionColor = _readingPulseBright ? Color.FromArgb(66, 111, 151) : Color.FromArgb(30, 69, 110);
-            _status.Select(0, 0);
+            _pulseBright = !_pulseBright;
+            ColorizeStatus();
         };
         _successDisplay.Tick += (_, _) =>
         {
@@ -168,7 +191,7 @@ internal sealed class CollectorForm : Form
             Activity(_paused ? "Scanning is paused." : _terminalSession is null ? "Waiting for a USB drive..." : "Terminal opened.");
         };
         Shown += async (_, _) => await InitializeAsync();
-        FormClosing += (_, _) => { _timer.Stop(); _readingPulse.Stop(); _successDisplay.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
+        FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _successDisplay.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
     private void SetScanningPaused(bool paused)
@@ -181,31 +204,42 @@ internal sealed class CollectorForm : Form
     }
     private void Activity(string text, string level = "INFO", StatusTone tone = StatusTone.Default)
     {
-        _readingPulse.Stop(); _successDisplay.Stop();
+        _statusPulse.Stop(); _successDisplay.Stop();
+        _statusTone = tone == StatusTone.Default ? level == "ERROR" ? StatusTone.Error : level == "WARN" && text.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ? StatusTone.Warning : StatusTone.Default : tone;
         var display = _terminalSession is not null && !text.StartsWith("Terminal closed.", StringComparison.Ordinal) &&
             !text.Contains("Scanning is paused", StringComparison.Ordinal)
             ? text + (_paused ? " Scanning is paused in Terminal and this window." : " Scanning is paused in this window.") : text;
         if (_paused && _terminalSession is null && !display.Contains("Scanning is paused", StringComparison.Ordinal))
             display += " Scanning is paused.";
         _status.Text = display;
+        _pulseBright = false;
+        ColorizeStatus();
+        if (_statusTone is StatusTone.Reading or StatusTone.Warning or StatusTone.Error) _statusPulse.Start();
+        if (_statusTone == StatusTone.Success) _successDisplay.Start();
+        _activity.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {level,-5}  {text}");
+        if (_activity.Items.Count > 500) _activity.Items.RemoveAt(500);
+        Log($"{level} {text}");
+    }
+    private void ColorizeStatus()
+    {
         _status.SelectAll();
-        _status.SelectionColor = tone == StatusTone.Reading ? Color.FromArgb(30, 69, 110) :
-            tone == StatusTone.Success ? Color.FromArgb(24, 111, 68) :
-            level == "ERROR" ? Color.Firebrick : Color.FromArgb(15, 20, 25);
+        _status.SelectionColor = _statusTone switch
+        {
+            StatusTone.Reading => _pulseBright ? Color.FromArgb(66, 111, 151) : Color.FromArgb(30, 69, 110),
+            StatusTone.Error => _pulseBright ? Color.FromArgb(195, 73, 73) : Color.Firebrick,
+            StatusTone.Warning => _pulseBright ? Color.FromArgb(178, 128, 14) : Color.FromArgb(123, 86, 0),
+            StatusTone.Success => Color.FromArgb(24, 111, 68),
+            _ => Color.FromArgb(15, 20, 25)
+        };
         const string paused = "Scanning is paused";
-        var pausedAt = display.IndexOf(paused, StringComparison.Ordinal);
+        var pausedAt = _status.Text.IndexOf(paused, StringComparison.Ordinal);
         if (pausedAt >= 0)
         {
-            var sentenceEnd = display.IndexOf('.', pausedAt);
+            var sentenceEnd = _status.Text.IndexOf('.', pausedAt);
             _status.Select(pausedAt, sentenceEnd >= 0 ? sentenceEnd - pausedAt + 1 : paused.Length);
             _status.SelectionColor = Color.Firebrick;
         }
         _status.Select(0, 0);
-        if (tone == StatusTone.Reading) { _readingPulseBright = false; _readingPulse.Start(); }
-        if (tone == StatusTone.Success) _successDisplay.Start();
-        _activity.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {level,-5}  {text}");
-        if (_activity.Items.Count > 500) _activity.Items.RemoveAt(500);
-        Log($"{level} {text}");
     }
     private static async Task CopyWorkbookPathAsync(string path, Button button, IWin32Window owner)
     {
@@ -307,15 +341,17 @@ internal sealed class CollectorForm : Form
                 try { _version = await _probe.VersionAsync(_closing.Token); } catch (Exception ex) { Log(ex.ToString()); }
             }
             try { Activity(_autoPlay.TryOffer(this)); } catch (Exception ex) { Activity("AutoPlay setting could not be changed.", "WARN"); Log(ex.ToString()); }
+            await Task.Delay(3000, _closing.Token);
             Activity(_probe is null ? "Manual Drive Entry is ready. Install smartmontools for automatic scanning." : "Waiting for a USB drive...");
             _guidance.Text = _probe is null ? "Use Manual Drive Entry or Workbook Setup." : "Insert one drive at a time. Use Manual Drive Entry or Workbook Setup at any time.";
             RefreshFooter(); _timer.Start();
         }
+        catch (OperationCanceledException) when (_closing.IsCancellationRequested) { }
         catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, ex.Message, "Startup Failed", MessageBoxButtons.OK, MessageBoxIcon.Error); Close(); }
     }
     private async Task PollAsync()
     {
-        if (_busy || _paused || _modal || _probe is null || _closing.IsCancellationRequested) return;
+        if (_busy || _paused || _modal || _probe is null || _closing.IsCancellationRequested || DateTime.UtcNow < _scanHoldUntil) return;
         _busy = true;
         try
         {
@@ -333,11 +369,12 @@ internal sealed class CollectorForm : Form
             {
                 var record = await _probe.IdentifyAsync(disk, _closing.Token);
                 if (_closing.IsCancellationRequested) return;
-                if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; System.Media.SystemSounds.Exclamation.Play(); }
-                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; System.Media.SystemSounds.Asterisk.Play(); }
+                if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; if (_soundsEnabled) System.Media.SystemSounds.Exclamation.Play(); }
+                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; if (_soundsEnabled) System.Media.SystemSounds.Asterisk.Play(); }
+                _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
-            { Activity($"Disk {disk.Number} could not be read: {ex.Message}", "ERROR"); _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry."; Log(ex.ToString()); }
+            { Activity($"Disk {disk.Number} could not be read: {ex.Message}", "ERROR"); _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry."; _scanHoldUntil = DateTime.UtcNow.AddSeconds(3); Log(ex.ToString()); }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); Log(ex.ToString()); }
@@ -356,7 +393,7 @@ internal sealed class CollectorForm : Form
             _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
             _grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 76, 102);
             _grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, SortMode = DataGridViewColumnSortMode.NotSortable });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, ValueType = typeof(int), SortMode = DataGridViewColumnSortMode.Automatic });
             foreach (var key in _book.Columns)
             {
                 var width = key switch { "Make" => 160, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };

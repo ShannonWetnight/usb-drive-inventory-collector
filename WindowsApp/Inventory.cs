@@ -2,6 +2,9 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Validation;
 
 namespace USBDriveInventoryCollector;
 
@@ -39,7 +42,6 @@ internal sealed class InventoryBook
     public List<DriveRecord> Records { get; } = [];
     public string Path { get; }
     private static readonly XNamespace X = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-    private static readonly XNamespace Rel = "http://schemas.openxmlformats.org/package/2006/relationships";
     private static readonly XNamespace DocRel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
     public InventoryBook(string path) { Path = path; }
@@ -146,29 +148,39 @@ internal sealed class InventoryBook
         var sheet = new XElement(X + "worksheet",
             new XElement(X + "sheetViews", new XElement(X + "sheetView", new XAttribute("workbookViewId", 0),
                 new XElement(X + "pane", new XAttribute("ySplit", 1), new XAttribute("topLeftCell", "A2"), new XAttribute("activePane", "bottomLeft"), new XAttribute("state", "frozen")))),
+            new XElement(X + "sheetFormatPr", new XAttribute("defaultRowHeight", 15)),
             new XElement(X + "cols", Columns.Select((key, i) => new XElement(X + "col", new XAttribute("min", i + 1), new XAttribute("max", i + 1), new XAttribute("width", key == "Model" ? 35 : 25), new XAttribute("customWidth", 1)))),
             new XElement(X + "sheetData", new[] { Row(1, Columns.Select(Header).ToArray(), true) }
                 .Concat(Records.Select((r, i) => Row(i + 2, Columns.Select(key => r[key]).ToArray(), false)))),
             Records.Count > 0 ? new XElement(X + "autoFilter", new XAttribute("ref", $"A1:{ColumnName(Columns.Count)}{Records.Count + 1}")) : null);
         var entries = new Dictionary<string, string> {
-            ["[Content_Types].xml"] = """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>""",
-            ["_rels/.rels"] = new XDocument(new XElement(Rel + "Relationships", new XElement(Rel + "Relationship", new XAttribute("Id", "rId1"), new XAttribute("Type", DocRel + "officeDocument"), new XAttribute("Target", "xl/workbook.xml")))).ToString(),
-            ["xl/workbook.xml"] = new XDocument(new XElement(X + "workbook", new XAttribute(XNamespace.Xmlns + "r", DocRel), new XElement(X + "sheets", new XElement(X + "sheet", new XAttribute("name", "Inventory"), new XAttribute("sheetId", 1), new XAttribute(DocRel + "id", "rId1"))))).ToString(),
-            ["xl/_rels/workbook.xml.rels"] = new XDocument(new XElement(Rel + "Relationships", new XElement(Rel + "Relationship", new XAttribute("Id", "rId1"), new XAttribute("Type", DocRel + "worksheet"), new XAttribute("Target", "worksheets/sheet1.xml")), new XElement(Rel + "Relationship", new XAttribute("Id", "rId2"), new XAttribute("Type", DocRel + "styles"), new XAttribute("Target", "styles.xml")))).ToString(),
+            ["xl/workbook.xml"] = new XDocument(new XElement(X + "workbook", new XAttribute(XNamespace.Xmlns + "r", DocRel),
+                new XElement(X + "bookViews", new XElement(X + "workbookView")),
+                new XElement(X + "sheets", new XElement(X + "sheet", new XAttribute("name", "Inventory"), new XAttribute("sheetId", 1), new XAttribute(DocRel + "id", "rId1"))))).ToString(),
             ["xl/styles.xml"] = """<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>""",
             ["xl/worksheets/sheet1.xml"] = new XDocument(sheet).ToString()
         };
         Exception? last = null;
         for (int attempt = 1; attempt <= 5; attempt++)
         {
-            var temp = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, $".{System.IO.Path.GetFileName(Path)}.{Guid.NewGuid():N}.tmp");
+            var temp = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, $".{System.IO.Path.GetFileNameWithoutExtension(Path)}.{Guid.NewGuid():N}.xlsx");
             try
             {
-                using (var zip = ZipFile.Open(temp, ZipArchiveMode.Create))
-                    foreach (var (name, content) in entries)
-                    { var entry = zip.CreateEntry(name, CompressionLevel.Optimal); using var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)); writer.Write(content); }
-                using (var check = ZipFile.OpenRead(temp))
-                    if (check.GetEntry("xl/workbook.xml") is null || check.GetEntry("xl/worksheets/sheet1.xml") is null) throw new InvalidDataException("Temporary workbook validation failed.");
+                using (var document = SpreadsheetDocument.Create(temp, SpreadsheetDocumentType.Workbook))
+                {
+                    var workbook = document.AddWorkbookPart();
+                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(entries["xl/workbook.xml"]))) workbook.FeedData(stream);
+                    var worksheet = workbook.AddNewPart<WorksheetPart>("rId1");
+                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(entries["xl/worksheets/sheet1.xml"]))) worksheet.FeedData(stream);
+                    var styles = workbook.AddNewPart<WorkbookStylesPart>("rId2");
+                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(entries["xl/styles.xml"]))) styles.FeedData(stream);
+                }
+                using (var check = SpreadsheetDocument.Open(temp, false))
+                {
+                    var errors = new OpenXmlValidator(FileFormatVersions.Office2007).Validate(check).Take(5)
+                        .Select(error => $"{error.Path?.XPath}: {error.Description}").ToArray();
+                    if (errors.Length > 0) throw new InvalidDataException("Workbook validation failed: " + string.Join("; ", errors));
+                }
                 if (File.Exists(Path)) { try { File.Replace(temp, Path, null); } catch (PlatformNotSupportedException) { File.Move(temp, Path, true); } }
                 else File.Move(temp, Path);
                 return;
