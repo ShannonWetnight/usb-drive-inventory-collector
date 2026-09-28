@@ -111,6 +111,7 @@ internal sealed class CollectorForm : Form
         try
         {
             var disks = await Task.Run(DriveProbe.Disks, _closing.Token);
+            if (_closing.IsCancellationRequested) return;
             var numbers = disks.Select(d => d.Number).ToHashSet();
             foreach (var old in _connected.Where(n => !numbers.Contains(n)).ToList()) { _connected.Remove(old); Activity($"Disk {old} removed. Ready for another drive."); }
             var disk = disks.FirstOrDefault(d => !_connected.Contains(d.Number));
@@ -123,7 +124,7 @@ internal sealed class CollectorForm : Form
             {
                 var record = await _probe.IdentifyAsync(disk, _closing.Token);
                 if (_closing.IsCancellationRequested) return;
-                if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); System.Media.SystemSounds.Exclamation.Play(); }
+                if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual entry."; System.Media.SystemSounds.Exclamation.Play(); }
                 else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}"); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; System.Media.SystemSounds.Asterisk.Play(); }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
