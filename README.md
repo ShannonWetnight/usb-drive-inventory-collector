@@ -111,7 +111,7 @@ This should cover many NVMe-to-USB enclosures and SATA-to-USB adapters, but USB 
 ## Setup
 
 1. Download the repository and extract it into a folder.
-2. Double-click `Launch USB Drive Inventory Collector.vbs` and approve the administrator prompt. Keep the launcher beside the two PowerShell scripts.
+2. Double-click `Launch USB Drive Inventory Collector.cmd` and approve the administrator prompt. Keep the launcher beside the two PowerShell scripts.
 3. If Windows or your organization's PowerShell policy blocks the script, follow the approved process for running local scripts. The launcher does not change execution policy.
 
 To start from an elevated PowerShell session, run:
@@ -157,7 +157,7 @@ Output\
 
 ### Windows GUI (v4.0.0)
 
-To launch it by double-clicking, open `Launch USB Drive Inventory Collector.vbs`. It requests administrator access through Windows and starts the GUI. A PowerShell console window may also open while the collector is running. Keep the launcher and both PowerShell scripts together in the same folder. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
+To launch it by double-clicking, open `Launch USB Drive Inventory Collector.cmd`. It requests administrator access through Windows and starts the GUI. A PowerShell console window may also open while the collector is running. Keep the launcher and both PowerShell scripts together in the same folder. The launcher does not change PowerShell's execution policy; if your policy blocks the script, follow your organization's approved process.
 
 You can also launch the GUI from an elevated STA PowerShell window:
 
@@ -176,7 +176,7 @@ The GUI uses the drive classification, smartctl transport fallbacks, direct XLSX
 
 ### Microsoft Defender reports
 
-Microsoft Defender has flagged the GitHub source ZIP twice, as `Trojan:Script/Wacatac.C!ml` and `Trojan:Script/Wacatac.H!ml`, on September 27, 2026. The latest alert names the `codeload.github.com` archive as the affected file. That does not show which file inside the archive triggered the detection or whether the alert is correct. Do not restore a quarantined copy or add a Defender exclusion. Submit the archive to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission) and wait for its determination.
+Microsoft Defender flagged the GitHub source ZIP on September 27, 2026, and a direct download of `Launch USB Drive Inventory Collector.vbs` on September 28 as `Trojan:Script/Wacatac.H!ml`. The individual-file alert identifies the VBS launcher as the affected file. The VBS launcher has been replaced with a readable CMD launcher; this change has not yet been confirmed to resolve Defender's detection. Do not restore a quarantined copy or add a Defender exclusion. If a fresh download is still flagged, submit the exact detected file to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission).
 
 ### Console workflow
 
