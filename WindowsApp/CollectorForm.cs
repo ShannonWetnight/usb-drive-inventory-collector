@@ -47,6 +47,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _sound = new() { Width = 36, Height = 34, Font = new Font("Segoe UI Emoji", 12), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
+    private readonly Button _refreshWorkbook = new() { Text = "↻", AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Font = new Font("Segoe UI Symbol", 15), Visible = true };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
     public CollectorForm()
     {
@@ -63,8 +64,8 @@ internal sealed class CollectorForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         Controls.Add(layout);
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78) };
-        var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft };
-        var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), Dock = DockStyle.Fill, Padding = new Padding(20, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft };
+        var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
+        var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), TextAlign = ContentAlignment.MiddleLeft };
         var info = new Button { Text = "Version Information", AccessibleName = "Version Information", Size = new Size(160, 34), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), Font = new Font("Segoe UI", 9), TextAlign = ContentAlignment.MiddleCenter, TabStop = true };
         info.Click += (_, _) => ShowVersionInformation();
         _toolTip.SetToolTip(info, "Version Information");
@@ -91,15 +92,34 @@ internal sealed class CollectorForm : Form
             try { CollectorSettings.SaveSoundsEnabled(!_soundsEnabled); _soundsEnabled = !_soundsEnabled; UpdateSoundButton(); }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Sound Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         };
-        header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions); layout.Controls.Add(header, 0, 0);
+        header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions);
+        header.Resize += (_, _) =>
+        {
+            var width = Math.Max(1, header.ClientSize.Width - headerActions.Width - 28);
+            title.SetBounds(20, 7, width, 37);
+            subtitle.SetBounds(20, 40, width, 25);
+        };
+        layout.Controls.Add(header, 0, 0);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 10, 0, 0) };
         _finish.Width = _setup.Width;
         foreach (var b in new[] { _pause, _manual, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
-        var status = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(22, 0, 0, 0) };
-        status.RowStyles.Add(new RowStyle(SizeType.Absolute, 55)); status.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        _status.Margin = Padding.Empty; _guidance.Margin = Padding.Empty; _guidance.Padding = new Padding(3, 0, 0, 0); _guidance.TextAlign = ContentAlignment.MiddleLeft;
-        status.Controls.Add(_status, 0, 0); status.Controls.Add(_guidance, 0, 1);
+        var status = new Panel { Dock = DockStyle.Fill };
+        _status.Dock = DockStyle.None; _guidance.Dock = DockStyle.None;
+        _guidance.Padding = Padding.Empty; _guidance.TextAlign = ContentAlignment.MiddleLeft;
+        status.Controls.Add(_status); status.Controls.Add(_guidance);
+        void PositionStatus()
+        {
+            var width = Math.Max(1, status.ClientSize.Width - 44);
+            var measured = TextRenderer.MeasureText(_status.Text, _status.Font, new Size(width, 1000), TextFormatFlags.WordBreak);
+            var statusHeight = Math.Clamp(measured.Height + 4, 28, 66);
+            const int guidanceHeight = 26, gap = 4;
+            var top = Math.Max(0, (status.ClientSize.Height - statusHeight - gap - guidanceHeight) / 2);
+            _status.SetBounds(22, top, width, statusHeight);
+            _guidance.SetBounds(22, top + statusHeight + gap, width, guidanceHeight);
+        }
+        status.Resize += (_, _) => PositionStatus();
+        _status.TextChanged += (_, _) => PositionStatus();
         layout.Controls.Add(status, 0, 2);
         var recordsPage = new TabPage("Recorded Drives") { Controls = { _grid } };
         _tabs.TabPages.Add(recordsPage);
@@ -116,14 +136,15 @@ internal sealed class CollectorForm : Form
         };
         _terminalPage.Controls.Add(_terminalOutput); _terminalPage.Controls.Add(terminalEntry); _tabs.TabPages.Add(_terminalPage);
         var tabHost = new Panel { Dock = DockStyle.Fill };
-        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_terminalToggle); tabHost.Controls.Add(_resetView);
+        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_terminalToggle); tabHost.Controls.Add(_resetView); tabHost.Controls.Add(_refreshWorkbook);
         void PositionTerminalToggle()
         {
             if (!_tabs.IsHandleCreated) return;
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
             _terminalToggle.Height = 28;
             _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
-            _resetView.Location = new Point(tabHost.ClientSize.Width - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
+            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 8, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
+            _resetView.Location = new Point(_refreshWorkbook.Left - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
         _tabs.HandleCreated += (_, _) => PositionTerminalToggle();
@@ -156,6 +177,8 @@ internal sealed class CollectorForm : Form
             if (ReferenceEquals(_tabs.SelectedTab, recordsPage)) BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(_tabs.SelectedTab, recordsPage)) _grid.Focus(); }));
         };
         _resetView.Click += (_, _) => ResetRecordView();
+        _refreshWorkbook.Click += (_, _) => ReloadWorkbook();
+        _toolTip.SetToolTip(_refreshWorkbook, "Refresh Workbook from disk");
         _grid.ColumnWidthChanged += (_, _) => MarkViewChanged();
         _grid.ColumnDisplayIndexChanged += (_, _) => MarkViewChanged();
         _grid.RowHeightChanged += (_, _) => MarkViewChanged();
@@ -435,7 +458,31 @@ internal sealed class CollectorForm : Form
     private void UpdateResetViewButton()
     {
         _resetView.Visible = _viewChanged && _tabs.SelectedIndex == 0;
+        _refreshWorkbook.Visible = _tabs.SelectedIndex == 0;
         if (_resetView.Visible) _resetView.BringToFront();
+        if (_refreshWorkbook.Visible) _refreshWorkbook.BringToFront();
+    }
+    private void ReloadWorkbook()
+    {
+        if (_busy || _modal || _terminalSession is not null)
+        {
+            MessageBox.Show(this, "Wait for the current operation to finish before refreshing the workbook.", "Refresh Workbook", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            if (!File.Exists(_book.Path)) throw new FileNotFoundException("The workbook was not found at its current location.", _book.Path);
+            var updated = new InventoryBook(_book.Path);
+            updated.OpenOrCreate();
+            _book = updated;
+            RefreshGrid();
+            Activity("Workbook refreshed from disk.");
+        }
+        catch (Exception ex)
+        {
+            Log(ex.ToString());
+            MessageBox.Show(this, ex.Message, "Refresh Workbook", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
     private void RefreshFooter()
     {
