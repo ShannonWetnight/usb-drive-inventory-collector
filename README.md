@@ -179,7 +179,7 @@ Both modes share the same drive detection, direct XLSX writer, logging, and Auto
 
 On September 28, 2026, Microsoft Defender removed a fresh download of the repository's `main` ZIP as `Trojan:Script/Wacatac.C!ml`. Earlier downloads were detected as `Trojan:Script/Wacatac.H!ml`, including a direct download of the former VBS launcher. The VBS launcher and repository test files have since been removed, but the ZIP alert still occurred on the maintainer's Windows machine. The individual source files downloaded without an alert during that check.
 
-The ZIP detection remains under review. If Defender blocks a download, keep the Protection History details and submit the exact detected archive to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission). Do not restore the quarantined file or disable protection to run it.
+The maintainer identifies this as a false positive. Microsoft's review and correction of the detection are still pending. If Defender blocks a download, keep the Protection History details and submit the exact detected archive to [Microsoft for analysis](https://www.microsoft.com/en-us/wdsi/filesubmission). Do not restore the quarantined file or disable protection to run it.
 
 ### Console workflow
 
