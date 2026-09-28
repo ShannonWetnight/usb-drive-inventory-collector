@@ -29,6 +29,7 @@
 - Shows recorded drives and activity, and lets you edit a saved row by double-clicking it.
 - Displays a record number in the app without adding a column to the workbook.
 - Restores the Recorded Drives layout with Reset View without changing workbook data.
+- Uses distinct reading, error, and saved-record status colors in the graphical interface.
 
 ## Download and Run
 

@@ -7,6 +7,7 @@ namespace USBDriveInventoryCollector;
 
 internal sealed class CollectorForm : Form
 {
+    private enum StatusTone { Default, Reading, Success }
     private InventoryBook _book;
     private readonly AutoPlayGuard _autoPlay = new();
     private readonly string _logPath;
@@ -14,6 +15,9 @@ internal sealed class CollectorForm : Form
     private readonly HashSet<int> _connected = [];
     private readonly CancellationTokenSource _closing = new();
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
+    private readonly System.Windows.Forms.Timer _readingPulse = new() { Interval = 700 };
+    private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 2400 };
+    private bool _readingPulseBright;
     private bool _busy, _paused, _modal;
     private string _version = "N/A";
     private readonly RichTextBox _status = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.None, BackColor = Color.FromArgb(246, 248, 251), Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
@@ -141,8 +145,21 @@ internal sealed class CollectorForm : Form
             }
         };
         _timer.Tick += async (_, _) => await PollAsync();
+        _readingPulse.Tick += (_, _) =>
+        {
+            _readingPulseBright = !_readingPulseBright;
+            _status.SelectAll();
+            _status.SelectionColor = _readingPulseBright ? Color.FromArgb(66, 111, 151) : Color.FromArgb(30, 69, 110);
+            _status.Select(0, 0);
+        };
+        _successDisplay.Tick += (_, _) =>
+        {
+            _successDisplay.Stop();
+            if (_busy || _modal) { _successDisplay.Start(); return; }
+            Activity(_paused ? "Scanning is paused." : _terminalSession is null ? "Waiting for a USB drive..." : "Terminal opened.");
+        };
         Shown += async (_, _) => await InitializeAsync();
-        FormClosing += (_, _) => { _timer.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
+        FormClosing += (_, _) => { _timer.Stop(); _readingPulse.Stop(); _successDisplay.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
     private void SetScanningPaused(bool paused)
@@ -153,15 +170,19 @@ internal sealed class CollectorForm : Form
         if (_terminalSession is not null) WriteTerminalOutput(_terminalGeneration, paused ? "Scanning paused from the main window. Press [P] or Resume Scanning to continue.\n" : "Scanning resumed from the main window.\n");
         Activity(paused ? (_terminalSession is null ? "Scanning is paused." : "Terminal scanning paused.") : "Scanning resumed.");
     }
-    private void Activity(string text, string level = "INFO")
+    private void Activity(string text, string level = "INFO", StatusTone tone = StatusTone.Default)
     {
+        _readingPulse.Stop(); _successDisplay.Stop();
         var display = _terminalSession is not null && !text.StartsWith("Terminal closed.", StringComparison.Ordinal) &&
             !text.Contains("Scanning is paused", StringComparison.Ordinal)
             ? text + (_paused ? " Scanning is paused in Terminal and this window." : " Scanning is paused in this window.") : text;
         if (_paused && _terminalSession is null && !display.Contains("Scanning is paused", StringComparison.Ordinal))
             display += " Scanning is paused.";
         _status.Text = display;
-        _status.SelectAll(); _status.SelectionColor = Color.FromArgb(15, 20, 25);
+        _status.SelectAll();
+        _status.SelectionColor = tone == StatusTone.Reading ? Color.FromArgb(30, 69, 110) :
+            tone == StatusTone.Success ? Color.FromArgb(24, 111, 68) :
+            level == "ERROR" ? Color.Firebrick : Color.FromArgb(15, 20, 25);
         const string paused = "Scanning is paused";
         var pausedAt = display.IndexOf(paused, StringComparison.Ordinal);
         if (pausedAt >= 0)
@@ -171,6 +192,8 @@ internal sealed class CollectorForm : Form
             _status.SelectionColor = Color.Firebrick;
         }
         _status.Select(0, 0);
+        if (tone == StatusTone.Reading) { _readingPulseBright = false; _readingPulse.Start(); }
+        if (tone == StatusTone.Success) _successDisplay.Start();
         _activity.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {level,-5}  {text}");
         if (_activity.Items.Count > 500) _activity.Items.RemoveAt(500);
         Log($"{level} {text}");
@@ -294,7 +317,7 @@ internal sealed class CollectorForm : Form
             var disk = disks.FirstOrDefault(d => !_connected.Contains(d.Number));
             if (disk is null) return;
             _connected.Add(disk.Number);
-            Activity($"USB drive detected on Disk {disk.Number}. Reading drive identity...");
+            Activity($"USB drive detected on Disk {disk.Number}. Reading drive identity...", tone: StatusTone.Reading);
             _guidance.Text = "Reading drive identity. Slow adapters may reach the 30-second timeout.";
             await Task.Delay(2000, _closing.Token);
             try
@@ -302,7 +325,7 @@ internal sealed class CollectorForm : Form
                 var record = await _probe.IdentifyAsync(disk, _closing.Token);
                 if (_closing.IsCancellationRequested) return;
                 if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; System.Media.SystemSounds.Exclamation.Play(); }
-                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}"); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; System.Media.SystemSounds.Asterisk.Play(); }
+                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; System.Media.SystemSounds.Asterisk.Play(); }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             { Activity($"Disk {disk.Number} could not be read: {ex.Message}", "ERROR"); _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry."; Log(ex.ToString()); }
@@ -531,7 +554,7 @@ internal sealed class CollectorForm : Form
                     RefreshGrid();
                     _grid.ClearSelection();
                     foreach (DataGridViewRow row in _grid.Rows) if (row.Tag is int recordIndex && recordIndex == index) { row.Selected = true; _grid.FirstDisplayedScrollingRowIndex = row.Index; break; }
-                    Activity($"Row {index + 2} updated: {candidate["Model"]} / {candidate["SerialNumber"]}");
+                    Activity($"Row {index + 2} updated: {candidate["Model"]} / {candidate["SerialNumber"]}", tone: StatusTone.Success);
                     dialog.Close();
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, ex.Message, "Edit Recorded Drive", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
@@ -602,7 +625,7 @@ internal sealed class CollectorForm : Form
                     if (action == "Serial") { serial.Focus(); serial.SelectAll(); return; }
                     if (action == "Cancel") { dialog.Close(); return; }
                     if (action == "Edit") return;
-                    var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}");
+                    var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success);
                     MessageBox.Show(dialog, $"Drive saved as row {row}.", "Drive Recorded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     copy.Enabled = true;
                     serial.Clear();
