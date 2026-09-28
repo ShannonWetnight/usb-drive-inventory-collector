@@ -18,8 +18,11 @@ if (-not (Test-Path -LiteralPath $LauncherPath)) { throw 'Double-click launcher 
 $LauncherSource = Get-Content -LiteralPath $LauncherPath -Raw
 if ($LauncherSource -notmatch 'Start-Process.+-Verb RunAs') { throw 'Launcher does not request elevation.' }
 if ($LauncherSource -notmatch 'USB-Drive-Inventory-Collector-GUI\.ps1') { throw 'Launcher does not use adjacent GUI script.' }
-if ($LauncherSource -match '(?i)-ExecutionPolicy\s+Bypass|-[Ee]ncoded[Cc]ommand|-WindowStyle\s+Hidden') {
-    throw 'Launcher must not bypass policy or hide the process.'
+if ($LauncherSource -notmatch 'USB-Drive-Inventory-Collector\.ps1') { throw 'Launcher does not offer adjacent console script.' }
+if ($LauncherSource -notmatch 'Start-Process.+-Verb RunAs -WindowStyle Hidden') { throw 'GUI launcher must hide the PowerShell host.' }
+if ($LauncherSource -notmatch '(?m)^:console\s*$') { throw 'Launcher does not offer console mode.' }
+if ($LauncherSource -match '(?i)-ExecutionPolicy\s+Bypass|-[Ee]ncoded[Cc]ommand') {
+    throw 'Launcher must not bypass policy or encode commands.'
 }
 if (Test-Path -LiteralPath (Join-Path $Root 'Launch USB Drive Inventory Collector.vbs')) {
     throw 'Flagged VBS launcher must be removed.'
