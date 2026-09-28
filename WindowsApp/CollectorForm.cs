@@ -25,7 +25,8 @@ internal sealed class CollectorForm : Form
     private readonly ListBox _activity = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, Font = new Font("Consolas", 9) };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(130, 36) };
     private readonly RichTextBox _terminalOutput = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BackColor = Color.FromArgb(18, 22, 28), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
-    private readonly TextBox _terminalInput = new() { Font = new Font("Consolas", 10), Text = "Terminal disabled", AutoSize = false, Enabled = false };
+    private readonly TextBox _terminalInput = new() { Font = new Font("Consolas", 10), Text = "Terminal disabled", BorderStyle = BorderStyle.None, Enabled = false };
+    private readonly Panel _terminalInputFrame = new() { BorderStyle = BorderStyle.FixedSingle, BackColor = SystemColors.Control };
     private readonly Button _terminalSend = new() { Text = "Send", Size = new Size(78, 28), Enabled = false };
     private readonly TabPage _terminalPage = new("Terminal");
     private EmbeddedTerminalIO? _terminalIO;
@@ -37,6 +38,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
+    private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = true };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
     public CollectorForm()
     {
@@ -70,37 +72,41 @@ internal sealed class CollectorForm : Form
         var status = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(22, 0, 0, 0) };
         status.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); status.RowStyles.Add(new RowStyle(SizeType.Percent, 45)); status.Controls.Add(_status, 0, 0); status.Controls.Add(_guidance, 0, 1);
         layout.Controls.Add(status, 0, 2);
-        _tabs.TabPages.Add(new TabPage("Recorded Drives") { Controls = { _grid } });
+        var recordsPage = new TabPage("Recorded Drives") { Controls = { _grid } };
+        _tabs.TabPages.Add(recordsPage);
         _tabs.TabPages.Add(new TabPage("Activity") { Controls = { _activity } });
         var terminalEntry = new Panel { Dock = DockStyle.Bottom, Height = 44, BackColor = Color.FromArgb(230, 234, 240) };
-        terminalEntry.Controls.Add(_terminalInput); terminalEntry.Controls.Add(_terminalSend);
+        _terminalInputFrame.Controls.Add(_terminalInput);
+        _terminalInputFrame.Resize += (_, _) => _terminalInput.SetBounds(5, (_terminalInputFrame.ClientSize.Height - _terminalInput.Height) / 2, Math.Max(1, _terminalInputFrame.ClientSize.Width - 10), _terminalInput.Height);
+        terminalEntry.Controls.Add(_terminalInputFrame); terminalEntry.Controls.Add(_terminalSend);
         terminalEntry.Resize += (_, _) =>
         {
             var top = (terminalEntry.ClientSize.Height - 28) / 2;
             _terminalSend.Location = new Point(terminalEntry.ClientSize.Width - _terminalSend.Width - 8, top);
-            _terminalInput.SetBounds(8, top, Math.Max(80, _terminalSend.Left - 16), 28);
+            _terminalInputFrame.SetBounds(8, top, Math.Max(80, _terminalSend.Left - 16), 28);
         };
         _terminalPage.Controls.Add(_terminalOutput); _terminalPage.Controls.Add(terminalEntry); _tabs.TabPages.Add(_terminalPage);
         var tabHost = new Panel { Dock = DockStyle.Fill };
-        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_terminalToggle);
+        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_terminalToggle); tabHost.Controls.Add(_resetView);
         void PositionTerminalToggle()
         {
             if (!_tabs.IsHandleCreated) return;
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
             _terminalToggle.Height = 28;
             _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
+            _resetView.Location = new Point(tabHost.ClientSize.Width - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
         _tabs.HandleCreated += (_, _) => PositionTerminalToggle();
         layout.Controls.Add(tabHost, 0, 3);
-        var footer = new Panel { Dock = DockStyle.Fill };
+        var footer = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
         footer.Controls.Add(_footer); footer.Controls.Add(_copyPath); footer.Controls.Add(_openPath);
         footer.Resize += (_, _) =>
         {
             const int gap = 8;
             _openPath.Location = new Point(footer.ClientSize.Width - _openPath.Width - 14, (footer.ClientSize.Height - _openPath.Height) / 2);
             _copyPath.Location = new Point(_openPath.Left - _copyPath.Width - gap, (footer.ClientSize.Height - _copyPath.Height) / 2);
-            _footer.SetBounds(18, 0, Math.Max(0, _copyPath.Left - gap - 18), footer.ClientSize.Height);
+            _footer.SetBounds(18, (footer.ClientSize.Height - 28) / 2, Math.Max(0, _copyPath.Left - gap - 18), 28);
         };
         _toolTip.SetToolTip(_footer, "Workbook Save Location"); _toolTip.SetToolTip(_copyPath, "Copy workbook location to clipboard"); _toolTip.SetToolTip(_openPath, "Open the workbook folder in File Explorer");
         layout.Controls.Add(footer, 0, 4);
@@ -108,11 +114,19 @@ internal sealed class CollectorForm : Form
         _manual.Click += (_, _) => ManualEntry(false);
         _setup.Click += (_, _) => Setup();
         _terminalToggle.Click += (_, _) => { if (_terminalSession is null) _terminalTask = OpenTerminalAsync(); else _terminalSession.Stop(); };
-        _tabs.SelectedIndexChanged += (_, _) => { _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage) || _terminalSession is not null; PositionTerminalToggle(); if (_terminalToggle.Visible) _terminalToggle.BringToFront(); };
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage) || _terminalSession is not null;
+            _resetView.Visible = ReferenceEquals(_tabs.SelectedTab, recordsPage);
+            PositionTerminalToggle();
+            if (_terminalToggle.Visible) _terminalToggle.BringToFront();
+            if (_resetView.Visible) { _resetView.BringToFront(); BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(_tabs.SelectedTab, recordsPage)) _grid.Focus(); })); }
+        };
+        _resetView.Click += (_, _) => ResetRecordView();
         _terminalInput.KeyDown += (_, e) => { if (e.KeyCode != Keys.Enter || _terminalIO is null) return; e.SuppressKeyPress = true; SubmitTerminalInput(); };
         _terminalSend.Click += (_, _) => SubmitTerminalInput();
         KeyPress += TerminalKeyPress;
-        _copyPath.Click += (_, _) => CopyWorkbookPath(_book.Path, this);
+        _copyPath.Click += async (_, _) => await CopyWorkbookPathAsync(_book.Path, _copyPath, this);
         _openPath.Click += (_, _) => OpenWorkbookFolder(_book.Path, this);
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && _grid.Rows[e.RowIndex].Tag is int recordIndex) EditRecord(recordIndex); };
         _finish.Click += async (_, _) =>
@@ -161,9 +175,15 @@ internal sealed class CollectorForm : Form
         if (_activity.Items.Count > 500) _activity.Items.RemoveAt(500);
         Log($"{level} {text}");
     }
-    private void CopyWorkbookPath(string path, IWin32Window owner)
+    private static async Task CopyWorkbookPathAsync(string path, Button button, IWin32Window owner)
     {
-        try { Clipboard.SetText(path); Activity("Workbook location copied to clipboard."); }
+        try
+        {
+            Clipboard.SetText(path);
+            var marker = new object(); button.Tag = marker; button.Text = "Copied";
+            await Task.Delay(1000);
+            if (!button.IsDisposed && ReferenceEquals(button.Tag, marker)) button.Text = "Copy Path";
+        }
         catch (Exception ex) { MessageBox.Show(owner, ex.Message, "Copy Workbook Location"); }
     }
     private static void OpenWorkbookFolder(string path, IWin32Window owner)
@@ -171,21 +191,31 @@ internal sealed class CollectorForm : Form
         try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = File.Exists(path) ? $"/select,\"{path}\"" : $"\"{Path.GetDirectoryName(path)}\"" }); }
         catch (Exception ex) { MessageBox.Show(owner, ex.Message, "Open Workbook Folder"); }
     }
+    private static Panel CenteredField(TextBox input, Rectangle bounds)
+    {
+        var frame = new Panel { Bounds = bounds, BorderStyle = BorderStyle.FixedSingle, BackColor = SystemColors.Window };
+        input.BorderStyle = BorderStyle.None;
+        frame.Controls.Add(input);
+        frame.Resize += (_, _) => input.SetBounds(5, (frame.ClientSize.Height - input.Height) / 2, Math.Max(1, frame.ClientSize.Width - 10), input.Height);
+        input.SetBounds(5, (frame.ClientSize.Height - input.Height) / 2, Math.Max(1, frame.ClientSize.Width - 10), input.Height);
+        return frame;
+    }
     private void ShowFinishDialog()
     {
         using var dialog = new Form { Text = "Inventory Saved", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(560, 160), MaximizeBox = false, MinimizeBox = false, Font = new Font("Segoe UI", 10) };
         var path = _book.Path;
         var message = new Label { Text = "Workbook saved at:", Bounds = new Rectangle(20, 16, 520, 25) };
-        var location = new TextBox { Text = path, ReadOnly = true, Bounds = new Rectangle(20, 46, 520, 28), TabStop = false };
+        var location = new TextBox { Text = path, ReadOnly = true, TabStop = false };
+        var locationFrame = CenteredField(location, new Rectangle(20, 46, 520, 28));
         var copy = Button("Copy Path", 20, 102, 160);
         var open = Button("Open Folder", 200, 102, 160);
         var close = Button("Close", 380, 102, 160);
         _toolTip.SetToolTip(location, path);
-        copy.Click += (_, _) => CopyWorkbookPath(path, dialog);
+        copy.Click += async (_, _) => await CopyWorkbookPathAsync(path, copy, dialog);
         open.Click += (_, _) => OpenWorkbookFolder(path, dialog);
         close.Click += (_, _) => { dialog.DialogResult = DialogResult.OK; dialog.Close(); };
         dialog.AcceptButton = close;
-        dialog.Controls.AddRange([message, location, copy, open, close]);
+        dialog.Controls.AddRange([message, locationFrame, copy, open, close]);
         if (dialog.ShowDialog(this) == DialogResult.OK) Close();
     }
     private void SubmitTerminalInput()
@@ -281,9 +311,9 @@ internal sealed class CollectorForm : Form
         catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); Log(ex.ToString()); }
         finally { _busy = false; }
     }
-    private void RefreshGrid()
+    private void RefreshGrid(bool preserveSort = true)
     {
-        var sortKey = _grid.SortedColumn?.Name;
+        var sortKey = preserveSort ? _grid.SortedColumn?.Name : null;
         var sortOrder = _grid.SortOrder;
         _grid.Columns.Clear();
         _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(48, 76, 102);
@@ -307,6 +337,13 @@ internal sealed class CollectorForm : Form
             _grid.Sort(_grid.Columns[sortKey]!, sortOrder == SortOrder.Descending ? System.ComponentModel.ListSortDirection.Descending : System.ComponentModel.ListSortDirection.Ascending);
         _grid.ClearSelection();
         RefreshFooter();
+    }
+    private void ResetRecordView()
+    {
+        RefreshGrid(preserveSort: false);
+        _grid.HorizontalScrollingOffset = 0;
+        if (_grid.Rows.Count > 0) _grid.FirstDisplayedScrollingRowIndex = 0;
+        _grid.Focus();
     }
     private void RefreshFooter()
     {
@@ -341,8 +378,8 @@ internal sealed class CollectorForm : Form
             BeginInvoke((Action)(() => { if (!IsDisposed) { _paused = paused; _pause.Text = paused ? "Resume Scanning" : "Pause Scanning"; Activity(paused ? "Terminal scanning paused." : "Terminal scanning resumed."); } }));
         });
         var generation = ++_terminalGeneration;
-        _terminalOutput.Clear(); _terminalInput.Clear(); _terminalInput.PlaceholderText = "Command or response"; _terminalInput.Enabled = true; _terminalSend.Enabled = true;
-        _manual.Enabled = false; _setup.Enabled = false; _grid.Enabled = false;
+        _terminalOutput.Clear(); _terminalInput.Clear(); _terminalInput.PlaceholderText = "Command or response"; _terminalInput.Enabled = true; _terminalInputFrame.BackColor = SystemColors.Window; _terminalSend.Enabled = true;
+        _manual.Enabled = false; _setup.Enabled = false;
         _terminalToggle.Text = "Disable Terminal";
         _terminalToggle.FlatStyle = FlatStyle.Flat; _terminalToggle.UseVisualStyleBackColor = false;
         _terminalToggle.BackColor = Color.Firebrick; _terminalToggle.ForeColor = Color.White;
@@ -370,8 +407,8 @@ internal sealed class CollectorForm : Form
             _terminalSession = null; _terminalIO = null;
             if (!IsDisposed)
             {
-                _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalSend.Enabled = false; _terminalToggle.Text = "Enable Terminal";
-                _manual.Enabled = true; _setup.Enabled = true; _grid.Enabled = true;
+                _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalInputFrame.BackColor = SystemColors.Control; _terminalSend.Enabled = false; _terminalToggle.Text = "Enable Terminal";
+                _manual.Enabled = true; _setup.Enabled = true;
                 _terminalToggle.FlatStyle = FlatStyle.Standard; _terminalToggle.UseVisualStyleBackColor = true;
                 _terminalToggle.BackColor = SystemColors.Control; _terminalToggle.ForeColor = SystemColors.ControlText;
                 _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage);
@@ -409,7 +446,8 @@ internal sealed class CollectorForm : Form
             foreach (var key in optional) list.Items.Add(InventoryBook.Header(key), _book.Columns.Contains(key));
             var note = new Label { Text = "Older and manual records receive N/A for extra fields. A backup keeps any fields removed from the active workbook.", Bounds = new Rectangle(20, 402, 510, 45) };
             var locationLabel = new Label { Text = "Workbook Save Location", Bounds = new Rectangle(20, 456, 270, 24), Font = new Font(Font, FontStyle.Bold) };
-            var location = new TextBox { Bounds = new Rectangle(20, 484, 397, 28), AutoSize = false, Text = _book.Path, ReadOnly = true };
+            var location = new TextBox { Text = _book.Path, ReadOnly = true };
+            var locationFrame = CenteredField(location, new Rectangle(20, 484, 397, 28));
             var browse = Button("Browse...", 425, 484, 105); browse.Height = 28;
             browse.Click += (_, _) =>
             {
@@ -446,7 +484,7 @@ internal sealed class CollectorForm : Form
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, "Setup was not applied: " + ex.Message); }
             };
-            dialog.Controls.AddRange([intro, list, note, locationLabel, location, browse, all, defaults, apply, cancel]);
+            dialog.Controls.AddRange([intro, list, note, locationLabel, locationFrame, browse, all, defaults, apply, cancel]);
             dialog.ShowDialog(this);
         }
         finally { _modal = false; }
@@ -454,6 +492,7 @@ internal sealed class CollectorForm : Form
     private static Button Button(string text, int x, int y, int width) => new() { Text = text, Bounds = new Rectangle(x, y, width, 34) };
     private void EditRecord(int index)
     {
+        if (_terminalSession is not null) { MessageBox.Show(this, "Disable Terminal before editing a recorded drive.", "Edit Recorded Drive"); return; }
         if (_busy) { MessageBox.Show(this, "Wait for the current drive read to finish before editing a record.", "Edit Recorded Drive"); return; }
         _modal = true;
         try
