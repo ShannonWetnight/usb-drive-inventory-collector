@@ -30,7 +30,7 @@
 
 ## Download and Run
 
-The next tagged version is **4.2.1**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.1.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.2.2**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.2.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -60,12 +60,12 @@ Drive types can be searched in the manual-entry list. Choose **Other** to enter 
 
 ### Terminal Interface
 
-Select **Terminal** to use the console-style workflow in a tab. Type a command or answer in the input box and press Enter. Prompts, manual entry, workbook setup, and scan results appear in the output area. Select **Close Terminal** to return to automatic GUI scanning.
+Select the **Terminal** tab or **Open Terminal** to start the console-style workflow. Press a command key while scanning. For prompts, type a response in the input box and press Enter or select **Send**. Prompts, manual entry, workbook setup, and scan results appear in the output area. Select **Close Terminal** to return to automatic GUI scanning.
 
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.2.1.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.2.2.exe' --terminal
 ```
 
 ### Terminal Keys
