@@ -19,7 +19,7 @@ jobs:
         shell: pwsh
         run: |
           [xml]$project = Get-Content 'WindowsApp/USBDriveInventoryCollector.csproj'
-          "version=$($project.Project.PropertyGroup.Version)" | Set-Content -Append $env:GITHUB_OUTPUT
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$($project.Project.PropertyGroup.Version)"
       - name: Publish self-contained executable
         run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
       - uses: actions/upload-artifact@v4
