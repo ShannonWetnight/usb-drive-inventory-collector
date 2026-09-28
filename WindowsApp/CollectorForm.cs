@@ -91,6 +91,7 @@ internal sealed class CollectorForm : Form
                     if (install is null) throw new IOException("WinGet could not be started.");
                     await install.WaitForExitAsync();
                     if (install.ExitCode != 0) throw new IOException($"WinGet failed with exit code {install.ExitCode}.");
+                    Environment.SetEnvironmentVariable("PATH", (Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine) ?? "") + ";" + (Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? ""));
                     smart = DriveProbe.FindSmartctl();
                 }
                 if (smart is null) throw new FileNotFoundException("smartctl.exe is required. Install smartmontools and reopen the collector.");
