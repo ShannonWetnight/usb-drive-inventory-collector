@@ -21,7 +21,7 @@ internal sealed class CollectorForm : Form
     private readonly Label _footer = new() { AutoEllipsis = true, AutoSize = false, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _copyPath = new() { Text = "Copy Path", Size = new Size(95, 28) };
     private readonly Button _openPath = new() { Text = "Open Folder", Size = new Size(110, 28) };
-    private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells, SelectionMode = DataGridViewSelectionMode.FullRowSelect };
+    private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, SelectionMode = DataGridViewSelectionMode.FullRowSelect, EnableHeadersVisualStyles = false, ColumnHeadersHeight = 34 };
     private readonly ListBox _activity = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, Font = new Font("Consolas", 9) };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
     private readonly RichTextBox _terminalOutput = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BackColor = Color.FromArgb(18, 22, 28), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
@@ -35,7 +35,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _pause = new() { Text = "Pause Scanning", Width = 140 };
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
-    private readonly Button _terminal = new() { Text = "Open Terminal", Width = 135 };
+    private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 28, Visible = false };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
     public CollectorForm()
     {
@@ -64,7 +64,7 @@ internal sealed class CollectorForm : Form
         info.Location = new Point((headerActions.ClientSize.Width - info.Width) / 2, (headerActions.ClientSize.Height - info.Height) / 2);
         header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions); layout.Controls.Add(header, 0, 0);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 10, 0, 0) };
-        foreach (var b in new[] { _pause, _manual, _setup, _terminal, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
+        foreach (var b in new[] { _pause, _manual, _setup, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
         var status = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(22, 0, 0, 0) };
         status.RowStyles.Add(new RowStyle(SizeType.Percent, 55)); status.RowStyles.Add(new RowStyle(SizeType.Percent, 45)); status.Controls.Add(_status, 0, 0); status.Controls.Add(_guidance, 0, 1);
@@ -79,8 +79,18 @@ internal sealed class CollectorForm : Form
             _terminalInput.SetBounds(8, (terminalEntry.ClientSize.Height - 28) / 2, Math.Max(80, _terminalSend.Left - 16), 28);
         };
         _terminalPage.Controls.Add(_terminalOutput); _terminalPage.Controls.Add(terminalEntry); _tabs.TabPages.Add(_terminalPage);
-        _terminalOutput.Text = "Select this tab or choose Open Terminal to start the command interface.";
-        layout.Controls.Add(_tabs, 0, 3);
+        _terminalOutput.Text = "Terminal is disabled. Choose Enable Terminal beside this tab to start the command interface.";
+        var tabHost = new Panel { Dock = DockStyle.Fill };
+        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_terminalToggle);
+        void PositionTerminalToggle()
+        {
+            if (!_tabs.IsHandleCreated) return;
+            var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
+            _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
+        }
+        tabHost.Resize += (_, _) => PositionTerminalToggle();
+        _tabs.HandleCreated += (_, _) => PositionTerminalToggle();
+        layout.Controls.Add(tabHost, 0, 3);
         var footer = new Panel { Dock = DockStyle.Fill };
         footer.Controls.Add(_footer); footer.Controls.Add(_copyPath); footer.Controls.Add(_openPath);
         footer.Resize += (_, _) =>
@@ -92,28 +102,36 @@ internal sealed class CollectorForm : Form
         };
         _toolTip.SetToolTip(_footer, "Workbook Save Location"); _toolTip.SetToolTip(_copyPath, "Copy workbook location to clipboard"); _toolTip.SetToolTip(_openPath, "Open the workbook folder in File Explorer");
         layout.Controls.Add(footer, 0, 4);
-        _pause.Click += (_, _) => { _paused = !_paused; _pause.Text = _paused ? "Resume Scanning" : "Pause Scanning"; Activity(_paused ? "Scanning is paused." : "Waiting for a USB drive..."); };
+        _pause.Click += (_, _) => SetScanningPaused(!_paused);
         _manual.Click += (_, _) => ManualEntry(false);
         _setup.Click += (_, _) => Setup();
-        _terminal.Click += async (_, _) => await OpenTerminalAsync();
-        _tabs.SelectedIndexChanged += async (_, _) => { if (ReferenceEquals(_tabs.SelectedTab, _terminalPage) && _terminalSession is null) await OpenTerminalAsync(); };
+        _terminalToggle.Click += async (_, _) => { if (_terminalSession is null) await OpenTerminalAsync(); else _terminalSession.Stop(); };
+        _tabs.SelectedIndexChanged += (_, _) => { _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage); PositionTerminalToggle(); if (_terminalToggle.Visible) _terminalToggle.BringToFront(); };
         _terminalInput.KeyDown += (_, e) => { if (e.KeyCode != Keys.Enter || _terminalIO is null) return; e.SuppressKeyPress = true; SubmitTerminalInput(); };
         _terminalSend.Click += (_, _) => SubmitTerminalInput();
         KeyPress += TerminalKeyPress;
         _copyPath.Click += (_, _) => { try { Clipboard.SetText(_book.Path); Activity("Workbook location copied to clipboard."); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Copy Workbook Location"); } };
         _openPath.Click += (_, _) => { try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = File.Exists(_book.Path) ? $"/select,\"{_book.Path}\"" : $"\"{Path.GetDirectoryName(_book.Path)}\"" }); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open Workbook Folder"); } };
-        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) EditRecord(e.RowIndex); };
+        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0 && _grid.Rows[e.RowIndex].Tag is int recordIndex) EditRecord(recordIndex); };
         _finish.Click += (_, _) => Close();
         _timer.Tick += async (_, _) => await PollAsync();
         Shown += async (_, _) => await InitializeAsync();
         FormClosing += (_, _) => { _timer.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
+    private void SetScanningPaused(bool paused)
+    {
+        _paused = paused;
+        _pause.Text = paused ? "Resume Scanning" : "Pause Scanning";
+        _terminalSession?.SetPaused(paused);
+        if (_terminalSession is not null) WriteTerminalOutput(_terminalGeneration, paused ? "Scanning paused from the main window. Press [P] or Resume Scanning to continue.\n" : "Scanning resumed from the main window.\n");
+        Activity(paused ? (_terminalSession is null ? "Scanning is paused." : "Scanning is paused in Terminal and this window.") : "Scanning resumed.");
+    }
     private void Activity(string text, string level = "INFO")
     {
         var display = _terminalSession is not null && !text.StartsWith("Terminal closed.", StringComparison.Ordinal) &&
             !text.Contains("Scanning is paused", StringComparison.Ordinal)
-            ? text + " Scanning is paused in this window." : text;
+            ? text + (_paused ? " Scanning is paused in Terminal and this window." : " GUI scanning is paused while Terminal runs.") : text;
         if (_paused && _terminalSession is null && !display.Contains("Scanning is paused", StringComparison.Ordinal))
             display += " Scanning is paused.";
         _status.Text = display;
@@ -221,10 +239,29 @@ internal sealed class CollectorForm : Form
     }
     private void RefreshGrid()
     {
+        var sortKey = _grid.SortedColumn?.Name;
+        var sortOrder = _grid.SortOrder;
         _grid.Columns.Clear();
-        foreach (var key in _book.Columns) _grid.Columns.Add(key, InventoryBook.Header(key));
+        _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(48, 76, 102);
+        _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+        _grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 76, 102);
+        _grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, SortMode = DataGridViewColumnSortMode.NotSortable });
+        foreach (var key in _book.Columns)
+        {
+            var width = key switch { "Make" => 160, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = key, HeaderText = InventoryBook.Header(key), Width = width, MinimumWidth = 100, SortMode = DataGridViewColumnSortMode.Automatic });
+        }
         _grid.Rows.Clear();
-        foreach (var row in _book.Records) _grid.Rows.Add(_book.Columns.Select(key => row[key]).Cast<object>().ToArray());
+        for (var index = 0; index < _book.Records.Count; index++)
+        {
+            var row = _book.Records[index];
+            var displayIndex = _grid.Rows.Add(new object[] { index + 1 }.Concat(_book.Columns.Select(key => (object)row[key])).ToArray());
+            _grid.Rows[displayIndex].Tag = index;
+        }
+        if (sortKey is not null && _grid.Columns.Contains(sortKey))
+            _grid.Sort(_grid.Columns[sortKey]!, sortOrder == SortOrder.Descending ? System.ComponentModel.ListSortDirection.Descending : System.ComponentModel.ListSortDirection.Ascending);
+        _grid.ClearSelection();
         RefreshFooter();
     }
     private void RefreshFooter()
@@ -254,19 +291,24 @@ internal sealed class CollectorForm : Form
         _timer.Stop();
         using var io = new EmbeddedTerminalIO();
         _terminalIO = io;
-        _terminalSession = TerminalCollector.ForEmbedded(io);
+        _terminalSession = TerminalCollector.ForEmbedded(io, _paused, paused =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            BeginInvoke((Action)(() => { if (!IsDisposed) { _paused = paused; _pause.Text = paused ? "Resume Scanning" : "Pause Scanning"; Activity(paused ? "Scanning is paused in Terminal and this window." : "Terminal scanning resumed."); } }));
+        });
         var generation = ++_terminalGeneration;
         _terminalOutput.Clear(); _terminalInput.Enabled = true; _terminalSend.Enabled = true;
-        _terminal.Text = "Close Terminal";
-        _terminal.FlatStyle = FlatStyle.Flat; _terminal.UseVisualStyleBackColor = false;
-        _terminal.BackColor = Color.Firebrick; _terminal.ForeColor = Color.White;
+        _manual.Enabled = false; _setup.Enabled = false; _grid.Enabled = false;
+        _terminalToggle.Text = "Disable Terminal";
+        _terminalToggle.FlatStyle = FlatStyle.Flat; _terminalToggle.UseVisualStyleBackColor = false;
+        _terminalToggle.BackColor = Color.Firebrick; _terminalToggle.ForeColor = Color.White;
         _tabs.SelectedTab = _terminalPage;
         BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(io, _terminalIO)) _terminalInput.Focus(); }));
         io.Output += value => WriteTerminalOutput(generation, value);
         io.Cleared += () => ClearTerminalOutput(generation);
         try
         {
-            Activity("Terminal opened. Scanning is paused in this window.");
+            Activity(_paused ? "Terminal opened. Scanning is paused in Terminal and this window." : "Terminal opened. GUI scanning is paused while Terminal runs.");
             await Task.Run(_terminalSession.RunEmbedded);
             if (_closing.IsCancellationRequested) return;
             var updated = new InventoryBook(CollectorSettings.WorkbookPath());
@@ -275,7 +317,7 @@ internal sealed class CollectorForm : Form
             RefreshGrid();
             _connected.Clear();
             try { foreach (var disk in DriveProbe.Disks()) _connected.Add(disk.Number); } catch (Exception ex) { Log(ex.ToString()); }
-            Activity("Terminal closed. Workbook reloaded.");
+            Activity(_paused ? "Terminal closed. Workbook reloaded. Scanning is paused." : "Terminal closed. Workbook reloaded.");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Log(ex.ToString()); WriteTerminalOutput(generation, $"Terminal error: {ex.Message}{Environment.NewLine}"); MessageBox.Show(this, ex.Message, "Terminal", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
@@ -284,9 +326,11 @@ internal sealed class CollectorForm : Form
             _terminalSession = null; _terminalIO = null;
             if (!IsDisposed)
             {
-                _terminalInput.Enabled = false; _terminalSend.Enabled = false; _terminal.Text = "Open Terminal";
-                _terminal.FlatStyle = FlatStyle.Standard; _terminal.UseVisualStyleBackColor = true;
-                _terminal.BackColor = SystemColors.Control; _terminal.ForeColor = SystemColors.ControlText;
+                _terminalInput.Enabled = false; _terminalSend.Enabled = false; _terminalToggle.Text = "Enable Terminal";
+                _manual.Enabled = true; _setup.Enabled = true; _grid.Enabled = true;
+                _terminalToggle.FlatStyle = FlatStyle.Standard; _terminalToggle.UseVisualStyleBackColor = true;
+                _terminalToggle.BackColor = SystemColors.Control; _terminalToggle.ForeColor = SystemColors.ControlText;
+                _terminalOutput.AppendText($"{Environment.NewLine}Terminal disabled. Choose Enable Terminal beside this tab to start again.{Environment.NewLine}");
             }
             _modal = false;
             if (!_closing.IsCancellationRequested) _timer.Start();
@@ -402,7 +446,8 @@ internal sealed class CollectorForm : Form
                     if (MessageBox.Show(dialog, $"Save changes to row {index + 2}?", "Review Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
                     _book.Update(index, candidate);
                     RefreshGrid();
-                    _grid.ClearSelection(); _grid.Rows[index].Selected = true;
+                    _grid.ClearSelection();
+                    foreach (DataGridViewRow row in _grid.Rows) if (row.Tag is int recordIndex && recordIndex == index) { row.Selected = true; _grid.FirstDisplayedScrollingRowIndex = row.Index; break; }
                     Activity($"Row {index + 2} updated: {candidate["Model"]} / {candidate["SerialNumber"]}");
                     dialog.Close();
                 }

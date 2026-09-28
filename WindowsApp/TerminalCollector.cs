@@ -14,12 +14,18 @@ internal sealed class TerminalCollector
     private readonly string _logPath = Path.Combine(AppContext.BaseDirectory, "Output", "Logs", $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
     private DriveProbe? _probe;
     private string _smartVersion = "N/A";
-    private bool _paused;
+    private volatile bool _paused;
+    private Action<bool>? _pauseChanged;
     private volatile bool _stop;
 
     private TerminalCollector(ITerminalIO io, bool embedded) { _io = io; _embedded = embedded; }
     public static void Run() => new TerminalCollector(new ConsoleTerminalIO(), false).Start();
-    public static TerminalCollector ForEmbedded(EmbeddedTerminalIO io) => new(io, true);
+    public static TerminalCollector ForEmbedded(EmbeddedTerminalIO io, bool paused, Action<bool> pauseChanged)
+    {
+        var collector = new TerminalCollector(io, true) { _paused = paused, _pauseChanged = pauseChanged };
+        return collector;
+    }
+    public void SetPaused(bool paused) => _paused = paused;
     public void Stop() { _stop = true; if (_io is EmbeddedTerminalIO io) io.Close(); }
     public void RunEmbedded() => Start();
 
@@ -77,7 +83,7 @@ internal sealed class TerminalCollector
                 else if (key == 'L') ManualEntry(true);
                 else if (key == 'S') Setup();
                 else if (key == 'D') Details();
-                else if (key == 'P') { _paused = !_paused; Write(_paused ? "Scanning paused. Press [P] to resume." : "Scanning resumed."); }
+                else if (key == 'P') { _paused = !_paused; _pauseChanged?.Invoke(_paused); Write(_paused ? "Scanning paused. Press [P] to resume." : "Scanning resumed."); }
                 else if (key == 'H') Help();
             }
             if (!_paused && _probe is not null)
