@@ -36,6 +36,11 @@ jobs:
           python -c "from openpyxl import load_workbook; import sys; w=load_workbook(sys.argv[1]); assert w.active['C2'].value == 'TEST-SERIAL'" $path
       - uses: actions/upload-artifact@v4
         with:
+          name: Workbook-Compatibility-Sample-v${{ steps.app-version.outputs.version }}
+          path: ${{ runner.temp }}/Collector-Workbook-Check.xlsx
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
           name: USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}-preview
           path: publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
           if-no-files-found: error
