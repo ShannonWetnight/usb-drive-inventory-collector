@@ -119,9 +119,10 @@ internal sealed class DriveProbe
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         try { await process.WaitForExitAsync(timeout.Token); }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             try { process.Kill(true); } catch { }
+            if (ct.IsCancellationRequested) throw;
             throw new TimeoutException("smartctl timed out after 30 seconds. The USB adapter may need to be unplugged and reconnected.");
         }
         var output = await stdout; var error = await stderr;
@@ -162,9 +163,11 @@ internal sealed class DriveProbe
         var solid = rpm == "0" || Regex.IsMatch(model, "SSD|Solid[ _-]?State", RegexOptions.IgnoreCase);
         var rotational = long.TryParse(rpm, out var n) && n > 0;
         string size = form switch { "1.8 inches" => "1.8-inch ", "2.5 inches" => "2.5-inch ", "3.5 inches" => "3.5-inch ", "< 1.8 inches" => "<1.8-inch ", _ => "" };
+        if (form == "M.2") size = "M.2 ";
+        if (form == "mSATA") size = "mSATA ";
         if (protocol.Contains("NVMe", StringComparison.OrdinalIgnoreCase) || root.TryGetProperty("nvme_version", out _)) return size == "" ? "NVMe SSD" : size + "NVMe SSD";
         if (iface is "PATA" or "ATA (interface unknown)") return size + (iface == "PATA" ? "PATA" : "ATA") + (solid ? " SSD" : rotational ? " HDD" : " Drive");
-        if (iface == "SATA") return size + "SATA " + (solid ? "SSD" : rotational ? "HDD" : "Drive");
+        if (iface == "SATA") return form == "mSATA" && solid ? "mSATA SSD" : size + "SATA " + (solid ? "SSD" : rotational ? "HDD" : "Drive");
         if (solid || rotational) return size + (solid ? "SSD" : "HDD");
         return "N/A";
     }
