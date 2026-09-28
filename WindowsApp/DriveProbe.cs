@@ -9,6 +9,7 @@ namespace USBDriveInventoryCollector;
 internal sealed record UsbDisk(int Number, string FriendlyName, string SerialNumber);
 internal sealed class DriveProbe
 {
+    private const int DiskNotReady = 0xD011, DiskNoMedia = 0xD012, DiskNoContact = 12, DiskLostCommunication = 13;
     private readonly string _smartctl;
     private readonly Action<string> _log;
     private readonly Dictionary<int, string> _preferred = [];
@@ -27,7 +28,7 @@ internal sealed class DriveProbe
     public static List<UsbDisk> Disks()
     {
         var result = new List<UsbDisk>();
-        using var searcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT Number,BusType,IsBoot,IsSystem,FriendlyName,SerialNumber FROM MSFT_Disk");
+        using var searcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT Number,BusType,IsBoot,IsSystem,FriendlyName,SerialNumber,Size,OperationalStatus FROM MSFT_Disk");
         using var items = searcher.Get();
         foreach (ManagementObject disk in items)
         {
@@ -35,11 +36,17 @@ internal sealed class DriveProbe
             {
                 // MSFT_Disk.BusType 7 is USB. Never inventory a system or boot disk.
                 if (Convert.ToInt32(disk["BusType"]) != 7 || Convert.ToBoolean(disk["IsBoot"]) || Convert.ToBoolean(disk["IsSystem"])) continue;
+                // An empty USB dock or card reader can still appear as a disk.
+                // Wait until Windows reports media with a usable size before probing.
+                var size = disk["Size"] is null ? 0UL : Convert.ToUInt64(disk["Size"]);
+                var status = disk["OperationalStatus"] is null ? 0 : Convert.ToInt32(disk["OperationalStatus"]);
+                if (size == 0 || status is DiskNotReady or DiskNoMedia or DiskNoContact or DiskLostCommunication) continue;
                 result.Add(new UsbDisk(Convert.ToInt32(disk["Number"]), Value(disk["FriendlyName"]), Value(disk["SerialNumber"])));
             }
         }
         return result;
     }
+    public void Forget(int diskNumber) => _preferred.Remove(diskNumber);
     public async Task<string> VersionAsync(CancellationToken ct) => (await RunAsync(["--version"], ct)).Output.Split('\n')[0].Trim();
     public async Task<DriveRecord> IdentifyAsync(UsbDisk disk, CancellationToken ct)
     {
