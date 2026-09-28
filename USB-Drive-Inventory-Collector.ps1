@@ -42,8 +42,10 @@
 #>
 
 param (
-    [ValidateSet('GUI', 'CLI')][string]$Mode = 'GUI',
+    [ValidateSet('GUI', 'CLI', 'WorkerFunctions')][string]$Mode = 'GUI',
     [switch]$HideConsoleOnGuiReady,
+    # The double-click launcher requests elevation through this switch.
+    [switch]$ElevateOnStartup,
     [string]$OutputPath,
 
     [string]$LogPath,
@@ -83,6 +85,25 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
+if ($ElevateOnStartup -and $Mode -ne 'WorkerFunctions') {
+    $CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $CurrentPrincipal = [Security.Principal.WindowsPrincipal]::new($CurrentIdentity)
+    if (-not $CurrentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        $ChildArguments = '-NoLogo -NoProfile -STA '
+        if ($Mode -eq 'GUI') { $ChildArguments += '-NoExit ' }
+        $ChildArguments += '-File "{0}" -Mode {1}' -f $PSCommandPath, $Mode
+        if ($HideConsoleOnGuiReady) { $ChildArguments += ' -HideConsoleOnGuiReady' }
+        try {
+            Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $ChildArguments `
+                -WorkingDirectory $PSScriptRoot -Verb RunAs -ErrorAction Stop
+        }
+        catch {
+            Write-Host "Unable to launch as Administrator: $($_.Exception.Message)"
+            throw
+        }
+        exit 0
+    }
+}
 $ScriptVersion = "4.0.0"
 $RunId = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $script:PreferredTransportByDiskNumber = @{}
@@ -1580,6 +1601,8 @@ function Write-XlsxInventory {
 }
 
 
+if ($Mode -eq 'WorkerFunctions') { return }
+
 if ($Mode -eq 'CLI') {
 # ------------------------------------------------------------
 # Prerequisite checks
@@ -2369,20 +2392,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-$ParseErrors = $null
-$Tokens = $null
-$Ast = [Management.Automation.Language.Parser]::ParseFile($PSCommandPath, [ref]$Tokens, [ref]$ParseErrors)
-if ($ParseErrors.Count) { throw "Collector script has syntax errors: $($ParseErrors | Out-String)" }
-# Background runspaces need the common functions defined before CLI startup.
-$Cutoff = $Ast.Find({ param($Node)
-    $Node -is [Management.Automation.Language.AssignmentStatementAst] -and
-    $Node.Left.Extent.Text -eq '$Identity'
-}, $false)
-if ($null -eq $Cutoff) { throw 'Could not locate the collector function boundary.' }
-$script:WorkerDefinitions = ($Ast.FindAll({ param($Node)
-    $Node -is [Management.Automation.Language.FunctionDefinitionAst]
-}, $false) | Where-Object { $_.Extent.StartOffset -lt $Cutoff.Extent.StartOffset } |
-    ForEach-Object { $_.Extent.Text }) -join "`n`n"
+$script:CollectorScriptPath = $PSCommandPath
 
 $DefaultOutputDirectory = Join-Path $PSScriptRoot 'Output'
 [void](New-Item -ItemType Directory -Path $DefaultOutputDirectory -Force)
@@ -2847,9 +2857,9 @@ function Show-WorkbookSetup {
 }
 
 $script:WorkerScript = @'
-param($KnownNumbers, $Preferred, $Pattern, $Retries, $Settle, $RetryDelay,
+param($SourceFile, $KnownNumbers, $Preferred, $Pattern, $Retries, $Settle, $RetryDelay,
     $Timeout, $Smartctl, $LogFile, $RunIdentifier, $ProgressQueue)
-'@ + "`n" + $script:WorkerDefinitions + @'
+. $SourceFile -Mode WorkerFunctions
 
 $UsbDevicePattern = $Pattern
 $SmartctlRetries = $Retries
@@ -2896,7 +2906,7 @@ function Start-ScanWorker {
     $KnownNumbers = @($script:ConnectedDisks.Keys | ForEach-Object { [int]$_ })
     $Worker = [PowerShell]::Create()
     try {
-        $null = $Worker.AddScript($script:WorkerScript).AddArgument($KnownNumbers).AddArgument(
+        $null = $Worker.AddScript($script:WorkerScript).AddArgument($script:CollectorScriptPath).AddArgument($KnownNumbers).AddArgument(
             $script:PreferredTransportByDiskNumber).AddArgument($UsbDevicePattern).AddArgument(
             $SmartctlRetries).AddArgument($InitialSettleMilliseconds).AddArgument(
             $RetryDelayMilliseconds).AddArgument($SmartctlTimeoutSeconds).AddArgument(
