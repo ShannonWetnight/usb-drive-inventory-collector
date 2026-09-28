@@ -11,7 +11,7 @@ internal sealed class TerminalCollector
     private InventoryBook _book = new(CollectorSettings.WorkbookPath());
     private readonly AutoPlayGuard _autoPlay = new();
     private readonly HashSet<int> _connected = [];
-    private readonly string _logPath = Path.Combine(AppContext.BaseDirectory, "Output", "Logs", $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    private readonly string _logPath = Path.Combine(CollectorSettings.LogsDirectory(), $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
     private DriveProbe? _probe;
     private string _smartVersion = "N/A";
     private volatile bool _paused;

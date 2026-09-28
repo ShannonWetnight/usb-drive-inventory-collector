@@ -28,10 +28,12 @@
 - Offers to disable AutoPlay for the session and restores its previous setting when the collector exits normally.
 - Shows recorded drives and activity, and lets you edit a saved row by double-clicking it.
 - Displays a record number in the app without adding a column to the workbook.
+- Restores the Recorded Drives layout with Reset View without changing workbook data.
+- Uses distinct reading, error, and saved-record status colors in the graphical interface.
 
 ## Download and Run
 
-The next tagged version is **4.2.6**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.6.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.2.7**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.2.7.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -49,12 +51,13 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | --- | --- |
 | **Pause Scanning** | Stops automatic drive checks until you resume scanning. |
 | **Manual Drive Entry** | Opens the form to enter and review a drive record. |
-| **Workbook Setup** | Selects optional identity columns and the workbook save location. |
+| **Workbook Setup** | Selects optional identity columns, the workbook save location, and the logs save folder. |
 | **Terminal** tab | Shows the embedded terminal panel, initially disabled. |
 | **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab when selected and remains visible while Terminal is running. |
 | **Version Information** | Opens the app version and technical details from the banner. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
+| **Reset View** | Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
 | **Finish** | Shows the saved workbook path with Copy Path, Open Folder, and Close controls. |
 | Double-click a recorded row | Edits that saved record, including after sorting. |
 
@@ -67,7 +70,7 @@ Select the **Terminal** tab, then **Enable Terminal** to start the console-style
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.2.6.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.2.7.exe' --terminal
 ```
 
 ### Terminal Keys
@@ -88,6 +91,7 @@ The same executable can also open a separate console window when started with `-
 | Setting or value | Behavior |
 | --- | --- |
 | Workbook save location | Defaults to `Output/Inventory.xlsx` beside the executable. The selected path is remembered for the current Windows account. |
+| Logs save location | Defaults to `Output/Logs/` beside the executable. Choose another folder in Workbook Setup; it is remembered for the current Windows account. |
 | Workbook columns | Make, Model, Serial Number, Reported Capacity, and Type are included by default. Workbook Setup can add supported identity fields. |
 | AutoPlay | If enabled, the app asks whether to disable it for the session. The previous setting is restored on normal exit. |
 | Manual fields | Blank values are saved as `N/A`. Model and serial values are converted to uppercase. |
@@ -102,7 +106,7 @@ The collector uses smartctl autodetection and USB transport fallbacks for suppor
 
 ## Files and Workbook
 
-The default workbook is saved in `Output/Inventory.xlsx` beside the executable. You can choose another workbook location in Workbook Setup; the app remembers it for the current Windows account. Session logs are written to `Output/Logs/` beside the executable. The workbook uses the XLSX format and is written directly without Excel COM automation.
+The default workbook is saved in `Output/Inventory.xlsx` beside the executable. Session logs default to `Output/Logs/`. Workbook Setup lets you choose both locations and remembers them for the current Windows account. Changing the logs folder moves the active GUI log there. The workbook uses the XLSX format and is written directly without Excel COM automation.
 
 ## Build from Source
 

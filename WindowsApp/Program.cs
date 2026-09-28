@@ -12,12 +12,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "Output", "Logs"));
         var oldMode = SetErrorMode(0x0001 | 0x8000);
         SetErrorMode(oldMode | 0x0001 | 0x8000);
         var terminal = args.Length == 1 && args[0].Equals("--terminal", StringComparison.OrdinalIgnoreCase);
         try
         {
+            Directory.CreateDirectory(CollectorSettings.LogsDirectory());
             if (terminal)
             {
                 if (!AllocConsole()) throw new IOException("Could not open a terminal window.");
@@ -34,7 +34,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "Output", "Logs", "startup-error.log");
+            var path = Path.Combine(CollectorSettings.LogsDirectory(), "startup-error.log");
             try { File.AppendAllText(path, $"{DateTime.Now:O} {ex}\n"); } catch { }
             if (terminal) { Console.Error.WriteLine($"The collector could not start: {ex}\nLog: {path}"); Console.WriteLine("Press [Enter] to close."); Console.ReadLine(); }
             else MessageBox.Show($"The collector could not start. {ex.Message}\n\nDetails: {path}", "USB Drive Inventory Collector", MessageBoxButtons.OK, MessageBoxIcon.Error);
