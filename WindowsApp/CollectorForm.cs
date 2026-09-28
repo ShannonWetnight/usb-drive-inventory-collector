@@ -306,14 +306,23 @@ internal sealed class CollectorForm : Form
     private void PlayDriveNotification(DriveNotification notification)
     {
         if (!_soundsEnabled) return;
-        var sound = notification switch
+        // Keep the distinct console beep patterns from the original collector.
+        // Running them on a worker keeps the UI responsive during the tones.
+        var tones = notification switch
         {
-            DriveNotification.Saved => System.Media.SystemSounds.Asterisk,
-            DriveNotification.Duplicate => System.Media.SystemSounds.Exclamation,
-            DriveNotification.Error => System.Media.SystemSounds.Hand,
-            _ => System.Media.SystemSounds.Beep
+            DriveNotification.Saved => new[] { (1000, 150), (1200, 150) },
+            DriveNotification.Duplicate => new[] { (500, 400) },
+            DriveNotification.Error => new[] { (400, 220), (300, 320) },
+            _ => new[] { (800, 150) }
         };
-        sound.Play();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                foreach (var (frequency, duration) in tones) Console.Beep(frequency, duration);
+            }
+            catch { }
+        });
     }
     private static async Task CopyWorkbookPathAsync(string path, Button button, IWin32Window owner)
     {

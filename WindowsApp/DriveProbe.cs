@@ -46,7 +46,8 @@ internal sealed class DriveProbe
         var device = $"/dev/pd{disk.Number}";
         var transports = new List<string>();
         void Add(string? item) { if (!string.IsNullOrWhiteSpace(item) && !transports.Contains(item)) transports.Add(item); }
-        if (_preferred.TryGetValue(disk.Number, out var preferred)) Add(preferred);
+        _preferred.TryGetValue(disk.Number, out var preferred);
+        if (preferred is not null) Add(preferred);
         // A stalled scan-open is a timeout for the entire attempt.
         try
         {
@@ -66,10 +67,15 @@ internal sealed class DriveProbe
         foreach (var item in Fallbacks) Add(item);
         DriveRecord? fallback = null;
         var outcomes = new Dictionary<string, string>();
+        var timedOutTransports = new HashSet<string>();
         for (int cycle = 0; cycle < 2; cycle++)
         {
             foreach (var transport in transports)
             {
+                // If the cached best transport times out, don't try it a second
+                // time in this identify operation. Give the remaining transports
+                // a chance to read the same device before reporting the timeout.
+                if (timedOutTransports.Contains(transport)) continue;
                 ct.ThrowIfCancellationRequested();
                 // The optional JSON output flag must use --json=o. "-jo" is parsed
                 // as -j followed by -o (offlineauto), so every bridge probe fails.
@@ -110,7 +116,18 @@ internal sealed class DriveProbe
                     if (!bridge) fallback ??= record;
                     else outcomes[transport] = "bridge identity only";
                 }
-                catch (TimeoutException) { throw; }
+                catch (TimeoutException)
+                {
+                    outcomes[transport] = "timed out";
+                    if (transport == preferred)
+                    {
+                        timedOutTransports.Add(transport);
+                        _preferred.Remove(disk.Number);
+                        _log($"Cached preferred transport {transport} timed out for disk {disk.Number}; trying the remaining transports.");
+                        continue;
+                    }
+                    throw;
+                }
                 catch (OperationCanceledException) { throw; }
                 catch (InvalidOperationException) { throw; }
                 catch (Exception ex) { outcomes[transport] = ex is JsonException ? "invalid JSON" : ex.Message; _log($"identity disk={disk.Number} transport={transport}: {ex}"); }
