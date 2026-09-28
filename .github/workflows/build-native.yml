@@ -14,10 +14,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Read application version
+        id: app-version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content 'WindowsApp/USBDriveInventoryCollector.csproj'
+          "version=$($project.Project.PropertyGroup.Version)" | Set-Content -Append $env:GITHUB_OUTPUT
       - name: Publish self-contained executable
         run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
       - uses: actions/upload-artifact@v4
         with:
-          name: USB-Drive-Inventory-Collector-Windows-preview
-          path: publish/USB Drive Inventory Collector.exe
+          name: USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}-preview
+          path: publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
           if-no-files-found: error
