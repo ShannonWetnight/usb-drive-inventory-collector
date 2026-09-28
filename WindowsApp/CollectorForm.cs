@@ -19,9 +19,16 @@ internal sealed class CollectorForm : Form
     private readonly Label _status = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
     private readonly Label _guidance = new() { Dock = DockStyle.Fill, Text = "Insert one drive at a time." };
     private readonly Label _footer = new() { Dock = DockStyle.Fill, AutoEllipsis = true };
+    private readonly Button _copyPath = new() { Text = "Copy Path", Width = 92 };
+    private readonly Button _openPath = new() { Text = "Open Folder", Width = 108 };
     private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells, SelectionMode = DataGridViewSelectionMode.FullRowSelect };
     private readonly ListBox _activity = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, Font = new Font("Consolas", 9) };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly RichTextBox _terminalOutput = new() { Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.FromArgb(18, 22, 28), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
+    private readonly TextBox _terminalInput = new() { Dock = DockStyle.Bottom, Height = 32, Font = new Font("Consolas", 10), PlaceholderText = "Type a command or answer, then press Enter", Enabled = false };
+    private readonly TabPage _terminalPage = new("Terminal");
+    private EmbeddedTerminalIO? _terminalIO;
+    private TerminalCollector? _terminalSession;
     private readonly ToolTip _toolTip = new();
     private readonly Button _pause = new() { Text = "Pause Scanning", Width = 140 };
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
@@ -45,12 +52,12 @@ internal sealed class CollectorForm : Form
         var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78) };
         var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), Dock = DockStyle.Top, Height = 44, Padding = new Padding(20, 8, 60, 0) };
         var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), Dock = DockStyle.Fill, Padding = new Padding(22, 3, 0, 0) };
-        var info = new Button { Text = "ⓘ", AccessibleName = "Version Information", Width = 34, Height = 32, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(32, 55, 78), Font = new Font("Segoe UI Symbol", 15), TabStop = true };
-        info.FlatAppearance.BorderSize = 0;
+        var info = new Button { Text = "Version Information", AccessibleName = "Version Information", Bounds = new Rectangle(0, 12, 160, 34), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), Font = new Font("Segoe UI", 9), TabStop = true };
         info.Click += (_, _) => ShowVersionInformation();
-        header.Resize += (_, _) => info.Location = new Point(header.ClientSize.Width - 50, 13);
         _toolTip.SetToolTip(info, "Version Information");
-        header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(info); layout.Controls.Add(header, 0, 0);
+        var headerActions = new Panel { Dock = DockStyle.Right, Width = 178, BackColor = header.BackColor };
+        headerActions.Controls.Add(info);
+        header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions); layout.Controls.Add(header, 0, 0);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 10, 0, 0) };
         foreach (var b in new[] { _pause, _manual, _setup, _terminal, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
@@ -59,17 +66,25 @@ internal sealed class CollectorForm : Form
         layout.Controls.Add(status, 0, 2);
         _tabs.TabPages.Add(new TabPage("Recorded Drives") { Controls = { _grid } });
         _tabs.TabPages.Add(new TabPage("Activity") { Controls = { _activity } });
+        _terminalPage.Controls.Add(_terminalOutput); _terminalPage.Controls.Add(_terminalInput); _tabs.TabPages.Add(_terminalPage);
         layout.Controls.Add(_tabs, 0, 3);
-        _footer.Padding = new Padding(18, 9, 0, 0); layout.Controls.Add(_footer, 0, 4);
+        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Padding = new Padding(12, 2, 12, 2) };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
+        _footer.TextAlign = ContentAlignment.MiddleLeft; footer.Controls.Add(_footer, 0, 0); footer.Controls.Add(_copyPath, 1, 0); footer.Controls.Add(_openPath, 2, 0);
+        _toolTip.SetToolTip(_footer, "Workbook Save Location"); _toolTip.SetToolTip(_copyPath, "Copy workbook location to clipboard"); _toolTip.SetToolTip(_openPath, "Open the workbook folder in File Explorer");
+        layout.Controls.Add(footer, 0, 4);
         _pause.Click += (_, _) => { _paused = !_paused; _pause.Text = _paused ? "Resume Scanning" : "Pause Scanning"; Activity(_paused ? "Scanning paused." : "Waiting for a USB drive..."); };
         _manual.Click += (_, _) => ManualEntry(false);
         _setup.Click += (_, _) => Setup();
         _terminal.Click += async (_, _) => await OpenTerminalAsync();
+        _terminalInput.KeyDown += (_, e) => { if (e.KeyCode != Keys.Enter || _terminalIO is null) return; e.SuppressKeyPress = true; var answer = _terminalInput.Text; _terminalInput.Clear(); _terminalOutput.AppendText(answer + Environment.NewLine); _terminalIO.Submit(answer); };
+        _copyPath.Click += (_, _) => { try { Clipboard.SetText(_book.Path); Activity("Workbook location copied to clipboard."); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Copy Workbook Location"); } };
+        _openPath.Click += (_, _) => { try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = File.Exists(_book.Path) ? $"/select,\"{_book.Path}\"" : $"\"{Path.GetDirectoryName(_book.Path)}\"" }); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open Workbook Folder"); } };
         _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) EditRecord(e.RowIndex); };
         _finish.Click += (_, _) => Close();
         _timer.Tick += async (_, _) => await PollAsync();
         Shown += async (_, _) => await InitializeAsync();
-        FormClosing += (_, _) => { _timer.Stop(); _closing.Cancel(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
+        FormClosing += (_, _) => { _timer.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
     private void Activity(string text, string level = "INFO")
@@ -168,14 +183,23 @@ internal sealed class CollectorForm : Form
     }
     private async Task OpenTerminalAsync()
     {
+        if (_terminalSession is not null) { _terminalSession.Stop(); return; }
         if (_busy) { MessageBox.Show(this, "Wait for the current drive read to finish before opening Terminal.", "Terminal", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         _modal = true;
         _timer.Stop();
+        using var io = new EmbeddedTerminalIO();
+        _terminalIO = io;
+        _terminalSession = TerminalCollector.ForEmbedded(io);
+        _terminalOutput.Clear(); _terminalInput.Enabled = true;
+        _terminal.Text = "Close Terminal";
+        _tabs.SelectedTab = _terminalPage; _terminalInput.Focus();
+        io.Output += value => { if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { if (!IsDisposed && ReferenceEquals(io, _terminalIO)) { _terminalOutput.AppendText(value); _terminalOutput.ScrollToCaret(); } }); };
+        io.Cleared += () => { if (!IsDisposed && IsHandleCreated) BeginInvoke(() => { if (!IsDisposed && ReferenceEquals(io, _terminalIO)) _terminalOutput.Clear(); }); };
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = true, Arguments = "--terminal" }) ?? throw new IOException("Terminal could not be started.");
             Activity("Terminal opened. Scanning is paused in this window.");
-            await process.WaitForExitAsync(_closing.Token);
+            await Task.Run(_terminalSession.RunEmbedded);
+            if (_closing.IsCancellationRequested) return;
             var updated = new InventoryBook(CollectorSettings.WorkbookPath());
             updated.OpenOrCreate();
             _book = updated;
@@ -186,7 +210,7 @@ internal sealed class CollectorForm : Form
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, ex.Message, "Terminal", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-        finally { _modal = false; if (!_closing.IsCancellationRequested) _timer.Start(); }
+        finally { _terminalSession = null; _terminalIO = null; if (!IsDisposed) { _terminalInput.Enabled = false; _terminal.Text = "Terminal"; } _modal = false; if (!_closing.IsCancellationRequested) _timer.Start(); }
     }
     private void Setup()
     {

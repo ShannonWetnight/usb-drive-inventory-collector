@@ -19,5 +19,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: USB-Drive-Inventory-Collector-Windows-preview
-          path: publish/USB-Drive-Inventory-Collector.exe
+          path: publish/USB Drive Inventory Collector.exe
           if-no-files-found: error
