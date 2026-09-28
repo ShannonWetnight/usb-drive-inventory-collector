@@ -150,7 +150,7 @@ Output\
     USB-Drive-Inventory-Collector-YYYYMMDD-HHMMSS.log
 ```
 
-`Output\` is excluded by this repository's `.gitignore` so serial numbers and collected inventory data are not accidentally committed.
+`Output\` is created beside the scripts and contains workbook data and diagnostic logs. Do not include collected output in repository commits.
 
 ## Usage
 
