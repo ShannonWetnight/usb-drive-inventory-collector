@@ -23,7 +23,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _openPath = new() { Text = "Open Folder", Size = new Size(110, 28) };
     private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, SelectionMode = DataGridViewSelectionMode.FullRowSelect, EnableHeadersVisualStyles = false, ColumnHeadersHeight = 34 };
     private readonly ListBox _activity = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, Font = new Font("Consolas", 9) };
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
+    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(130, 36) };
     private readonly RichTextBox _terminalOutput = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BackColor = Color.FromArgb(18, 22, 28), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
     private readonly TextBox _terminalInput = new() { Font = new Font("Consolas", 10), Text = "Terminal disabled", AutoSize = false, Enabled = false };
     private readonly Button _terminalSend = new() { Text = "Send", Size = new Size(78, 28), Enabled = false };
@@ -87,8 +87,8 @@ internal sealed class CollectorForm : Form
         {
             if (!_tabs.IsHandleCreated) return;
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
-            _terminalToggle.Height = Math.Max(1, tab.Height - 4);
-            _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + 2);
+            _terminalToggle.Height = 28;
+            _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
         _tabs.HandleCreated += (_, _) => PositionTerminalToggle();
