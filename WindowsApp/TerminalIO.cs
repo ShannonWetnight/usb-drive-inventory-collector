@@ -25,14 +25,18 @@ internal sealed class ConsoleTerminalIO : ITerminalIO
 internal sealed class EmbeddedTerminalIO : ITerminalIO, IDisposable
 {
     private readonly BlockingCollection<string> _lines = new();
+    private int _waitingForLine;
     public event Action<string>? Output;
     public event Action? Cleared;
     public bool KeyAvailable => _lines.Count > 0;
+    public bool WaitingForLine => Volatile.Read(ref _waitingForLine) != 0;
     public char ReadKey() => ReadLine()?.Trim().FirstOrDefault() ?? '\0';
     public string? ReadLine()
     {
+        Interlocked.Exchange(ref _waitingForLine, 1);
         try { return _lines.Take(); }
         catch (InvalidOperationException) { return null; }
+        finally { Interlocked.Exchange(ref _waitingForLine, 0); }
     }
     public void Submit(string value)
     {
