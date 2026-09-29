@@ -33,7 +33,7 @@
 
 ## Download and Run
 
-The next tagged version is **4.3.1**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.3.1.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
+The next tagged version is **4.3.2**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.3.2.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
 
 Automatic drive identification requires `smartctl.exe` from smartmontools. If it is missing, the graphical app offers to install smartmontools through WinGet. In Terminal, automatic scanning remains unavailable if smartmontools is missing; manual entry is still available.
 
@@ -72,7 +72,7 @@ Select the **Terminal** tab, then **Enable Terminal** to start the console-style
 The same executable can also open a separate console window when started with `--terminal`:
 
 ```powershell
-& '.\USB-Drive-Inventory-Collector-v4.3.1.exe' --terminal
+& '.\USB-Drive-Inventory-Collector-v4.3.2.exe' --terminal
 ```
 
 ### Terminal Keys
@@ -94,7 +94,7 @@ The same executable can also open a separate console window when started with `-
 | --- | --- |
 | Workbook save location | Defaults to `Output/Inventory.xlsx` beside the executable. The selected path is remembered for the current Windows account. |
 | Logs save location | Defaults to `Output/Logs/` beside the executable. Choose another folder in Workbook Setup; it is remembered for the current Windows account. |
-| Workbook columns | Make, Model, Serial Number, Reported Capacity, and Type are included by default. Workbook Setup can add supported identity fields. |
+| Workbook columns | Manufacturer, Model, Serial Number, Reported Capacity, and Type are included by default. Workbook Setup can add supported identity fields. |
 | AutoPlay | If enabled, the app asks whether to disable it for the session. The previous setting is restored on normal exit. |
 | Manual fields | Blank values are saved as `N/A`. Model and serial values are converted to uppercase. |
 | Capacity | Enter a numeric value and select a unit: B, KB, MB, GB, TB, PB, or a custom unit. |

@@ -124,10 +124,10 @@ internal sealed class TerminalCollector
         {
             _io.Clear(); _io.WriteLine("MANUAL DRIVE ENTRY\n==================");
             _io.WriteLine("Press [Enter] for N/A or type :cancel to return to scanning.\n");
-            if (copy) { _io.WriteLine($"Copying: {draft.Make} / {draft.Model} / {draft.Capacity} / {draft.Type}"); if (!Field("Serial Number", ref draft.Serial)) return; }
+            if (copy) { _io.WriteLine($"Copying: {draft.Manufacturer} / {draft.Model} / {draft.Capacity} / {draft.Type}"); if (!Field("Serial Number", ref draft.Serial)) return; }
             else
             {
-                if (!Field("Step 1 of 5 – Make", ref draft.Make) || !Field("Step 2 of 5 – Model", ref draft.Model) ||
+                if (!Field("Step 1 of 5 – Manufacturer", ref draft.Manufacturer) || !Field("Step 2 of 5 – Model", ref draft.Model) ||
                     !Field("Step 3 of 5 – Serial Number", ref draft.Serial) || !Capacity(ref draft) || !Type(ref draft)) return;
             }
             while (true)
@@ -138,7 +138,7 @@ internal sealed class TerminalCollector
                     var match = Regex.Match(draft.Capacity, @"\A([0-9]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\z");
                     var unit = match.Success ? match.Groups[2].Value : "";
                     var listed = new[] { "B", "KB", "MB", "GB", "TB", "PB" }.Contains(unit);
-                    record = ManualValidation.Create(draft.Make, draft.Model, draft.Serial, match.Success ? match.Groups[1].Value : draft.Capacity,
+                    record = ManualValidation.Create(draft.Manufacturer, draft.Model, draft.Serial, match.Success ? match.Groups[1].Value : draft.Capacity,
                         listed ? unit : match.Success ? "Other" : "", listed ? "" : unit,
                         DriveTypes.Options.Contains(draft.Type, StringComparer.OrdinalIgnoreCase) ? draft.Type : "Other",
                         DriveTypes.Options.Contains(draft.Type, StringComparer.OrdinalIgnoreCase) ? "" : draft.Type);
@@ -173,10 +173,10 @@ internal sealed class TerminalCollector
 
     private bool EditDraft(ref Draft draft)
     {
-        _io.Write("Edit Make [1], Model [2], Serial [3], Capacity [4], Type [5], or back [B]: ");
+        _io.Write("Edit Manufacturer [1], Model [2], Serial [3], Capacity [4], Type [5], or back [B]: ");
         switch (_io.ReadLine()?.Trim())
         {
-            case "1": return Field("Make", ref draft.Make);
+            case "1": return Field("Manufacturer", ref draft.Manufacturer);
             case "2": return Field("Model", ref draft.Model);
             case "3": return Field("Serial Number", ref draft.Serial);
             case "4": return Capacity(ref draft);
@@ -279,8 +279,8 @@ internal sealed class TerminalCollector
 
     private sealed class Draft
     {
-        public string Make = "", Model = "", Serial = "", Capacity = "", Type = "N/A";
-        public static Draft From(DriveRecord record) => new() { Make = record["Make"], Model = record["Model"], Serial = "",
+        public string Manufacturer = "", Model = "", Serial = "", Capacity = "", Type = "N/A";
+        public static Draft From(DriveRecord record) => new() { Manufacturer = record["Manufacturer"], Model = record["Model"], Serial = "",
             Capacity = record["Capacity"] == "N/A" ? "" : record["Capacity"], Type = record["Type"] };
     }
 }

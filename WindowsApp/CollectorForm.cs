@@ -580,7 +580,7 @@ internal sealed class CollectorForm : Form
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordNumber", HeaderText = "#", Width = 54, MinimumWidth = 54, Frozen = true, ValueType = typeof(int), SortMode = DataGridViewColumnSortMode.Automatic });
             foreach (var key in _book.Columns)
             {
-                var width = key switch { "Make" => 160, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };
+                var width = key switch { "Manufacturer" => 175, "Model" => 260, "SerialNumber" => 210, "Capacity" => 150, "Type" => 200, _ => 175 };
                 _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = key, HeaderText = InventoryBook.Header(key), Width = width, MinimumWidth = 100, SortMode = DataGridViewColumnSortMode.Automatic });
             }
             EnsureHeaderHeight();
@@ -810,7 +810,7 @@ internal sealed class CollectorForm : Form
         try
         {
             using var dialog = new Form { Text = "Workbook Setup", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(550, 620), MaximizeBox = false, MinimizeBox = false };
-            var intro = new Label { Text = "Default columns: Make, Model, Serial Number, Reported Capacity, Type.\nSelect extra identity fields to save for each drive:", Bounds = new Rectangle(20, 12, 510, 55) };
+            var intro = new Label { Text = "Default columns: Manufacturer, Model, Serial Number, Reported Capacity, Type.\nSelect extra identity fields to save for each drive:", Bounds = new Rectangle(20, 12, 510, 55) };
             var list = new CheckedListBox { CheckOnClick = true, Bounds = new Rectangle(20, 70, 510, 265) };
             var optional = InventoryBook.Catalog.Select(c => c.Key).Except(InventoryBook.Core).ToList();
             foreach (var key in optional) list.Items.Add(InventoryBook.Header(key), _book.Columns.Contains(key));
@@ -939,9 +939,9 @@ internal sealed class CollectorForm : Form
         {
             using var dialog = new Form { Text = "Manual Drive Entry", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(560, 410), MaximizeBox = false, MinimizeBox = false, Font = new Font("Segoe UI", 10) };
             dialog.Controls.Add(new Label { Text = "Leave a field blank for N/A. Model and serial are saved in uppercase.", Bounds = new Rectangle(20, 12, 520, 30) });
-            var labels = new[] { "1. Make", "2. Model", "3. Serial Number", "4. Capacity (number only)" };
+            var labels = new[] { "1. Manufacturer", "2. Model", "3. Serial Number", "4. Capacity (number only)" };
             for (int i = 0; i < labels.Length; i++) dialog.Controls.Add(new Label { Text = labels[i], Bounds = new Rectangle(20, 47 + 43 * i, 195, 26) });
-            var make = Box(219, 47, 320); var model = Box(219, 90, 320); var serial = Box(219, 133, 320); var amount = Box(219, 176, 175);
+            var manufacturer = Box(219, 47, 320); var model = Box(219, 90, 320); var serial = Box(219, 133, 320); var amount = Box(219, 176, 175);
             model.CharacterCasing = CharacterCasing.Upper; serial.CharacterCasing = CharacterCasing.Upper;
             var unit = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Bounds = new Rectangle(405, 176, 134, 28), AccessibleName = "Capacity Unit" };
             _toolTip.SetToolTip(unit, "Capacity Unit");
@@ -966,14 +966,18 @@ internal sealed class CollectorForm : Form
                 customType.Visible = customTypeLabel.Visible = type.Text.Equals("Other", StringComparison.OrdinalIgnoreCase);
             }
             unit.SelectedIndexChanged += (_, _) => UpdateManualLayout();
-            type.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             var updatingTypeOptions = false;
-            var latestTypeQuery = "";
-            type.TextUpdate += (_, _) =>
+            var latestTypeQuery = type.Text;
+            var dropdownMaySelectText = false;
+            type.SelectedIndexChanged += (_, _) =>
             {
-                if (updatingTypeOptions) return;
-                var query = type.Text;
+                if (!updatingTypeOptions) { latestTypeQuery = type.Text; dropdownMaySelectText = false; }
+                UpdateManualLayout();
+            };
+            void FilterTypeOptions(string query)
+            {
                 latestTypeQuery = query;
+                dropdownMaySelectText = true;
                 type.DroppedDown = false;
                 updatingTypeOptions = true;
                 try
@@ -992,8 +996,39 @@ internal sealed class CollectorForm : Form
                     type.Text = query; type.SelectionStart = query.Length; type.SelectionLength = 0;
                 }));
                 UpdateManualLayout();
+            }
+            // The native ComboBox may select a matching item when its list reopens.
+            // Handle typed characters against the user's query, rather than that
+            // temporary selection (which could turn "SATA" into "ATA").
+            type.KeyPress += (_, e) =>
+            {
+                if (char.IsControl(e.KeyChar)) return;
+                var query = dropdownMaySelectText ? latestTypeQuery : type.Text;
+                var start = dropdownMaySelectText ? query.Length : type.SelectionStart;
+                var length = dropdownMaySelectText ? 0 : type.SelectionLength;
+                e.Handled = true;
+                FilterTypeOptions(query.Remove(start, length).Insert(start, e.KeyChar.ToString()));
+                type.SelectionStart = start + 1; type.SelectionLength = 0;
             };
-            dialog.Controls.AddRange([make, model, serial, amount, unit, customUnitLabel, customUnit, typeLabel, type, customTypeLabel, customType]);
+            type.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode is not (Keys.Back or Keys.Delete)) return;
+                var query = dropdownMaySelectText ? latestTypeQuery : type.Text;
+                var start = dropdownMaySelectText ? query.Length : type.SelectionStart;
+                var length = dropdownMaySelectText ? 0 : type.SelectionLength;
+                if (length == 0 && e.KeyCode == Keys.Back && start > 0) { start--; length = 1; }
+                if (length == 0 && e.KeyCode == Keys.Delete && start < query.Length) length = 1;
+                e.SuppressKeyPress = true;
+                if (length > 0) FilterTypeOptions(query.Remove(start, length));
+                type.SelectionStart = start; type.SelectionLength = 0;
+            };
+            type.TextUpdate += (_, _) =>
+            {
+                if (!updatingTypeOptions) FilterTypeOptions(type.Text);
+            };
+            type.Enter += (_, _) => { dropdownMaySelectText = false; type.SelectAll(); };
+            type.MouseDown += (_, _) => dropdownMaySelectText = false;
+            dialog.Controls.AddRange([manufacturer, model, serial, amount, unit, customUnitLabel, customUnit, typeLabel, type, customTypeLabel, customType]);
             UpdateManualLayout();
             if (copyLast && _book.Records.LastOrDefault() is { } last) { Fill(last); serial.Clear(); }
             var review = Button("Next", 20, 355, 130); var copy = Button("Copy Last Drive", 162, 355, 160); var back = Button("Return to Scanning", 334, 355, 205);
@@ -1006,7 +1041,7 @@ internal sealed class CollectorForm : Form
                 {
                     var choice = type.Text.Trim();
                     if (!types.Contains(choice, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Select a Drive Type from the list, or choose Other.");
-                    var record = ManualValidation.Create(make.Text, model.Text, serial.Text, amount.Text, unit.Text == "N/A" ? "" : unit.Text, customUnit.Text, choice, customType.Text);
+                    var record = ManualValidation.Create(manufacturer.Text, model.Text, serial.Text, amount.Text, unit.Text == "N/A" ? "" : unit.Text, customUnit.Text, choice, customType.Text);
                     var duplicate = _book.HasSerial(record["SerialNumber"]);
                     if (duplicate) PlayDriveNotification(DriveNotification.Duplicate);
                     var action = Review(record, duplicate);
@@ -1016,7 +1051,7 @@ internal sealed class CollectorForm : Form
                     MessageBox.Show(dialog, $"Drive saved as row {row}.", "Drive Recorded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     copy.Enabled = true;
                     serial.Clear();
-                    if (action == "Save") { make.Clear(); model.Clear(); amount.Clear(); unit.SelectedIndex = 0; customUnit.Clear(); type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray()); type.SelectedIndex = 0; SizeTypeDropdown(); customType.Clear(); dialog.Text = "Manual Drive Entry"; }
+                    if (action == "Save") { manufacturer.Clear(); model.Clear(); amount.Clear(); unit.SelectedIndex = 0; customUnit.Clear(); type.Items.Clear(); type.Items.AddRange(types.Cast<object>().ToArray()); type.SelectedIndex = 0; SizeTypeDropdown(); customType.Clear(); dialog.Text = "Manual Drive Entry"; }
                     else dialog.Text = "Manual Drive Entry – Copy Saved Drive";
                     serial.Focus();
                 }
@@ -1025,7 +1060,7 @@ internal sealed class CollectorForm : Form
             dialog.Controls.AddRange([review, copy, back]); dialog.ShowDialog(this);
             void Fill(DriveRecord record)
             {
-                make.Text = record["Make"] == "N/A" ? "" : record["Make"];
+                manufacturer.Text = record["Manufacturer"] == "N/A" ? "" : record["Manufacturer"];
                 model.Text = record["Model"] == "N/A" ? "" : record["Model"];
                 amount.Clear(); unit.SelectedIndex = 0; customUnit.Clear(); customType.Clear();
                 var match = Regex.Match(record["Capacity"], @"^([0-9]+(?:\.[0-9]+)?)\s+(.+)$");
@@ -1043,7 +1078,7 @@ internal sealed class CollectorForm : Form
     private string Review(DriveRecord record, bool duplicate)
     {
         using var dialog = new Form { Text = duplicate ? "Duplicate Serial Number" : "Review Manual Drive", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(490, 345), MaximizeBox = false, MinimizeBox = false };
-        var summary = new TextBox { Bounds = new Rectangle(20, 20, 450, 158), Multiline = true, ReadOnly = true, TabStop = false, Font = new Font("Consolas", 11), Lines = [$"Make:     {record["Make"]}", $"Model:    {record["Model"]}", $"Serial:   {record["SerialNumber"]}", $"Capacity: {record["Capacity"]}", $"Type:     {record["Type"]}"] };
+        var summary = new TextBox { Bounds = new Rectangle(20, 20, 450, 158), Multiline = true, ReadOnly = true, TabStop = false, Font = new Font("Consolas", 11), Lines = [$"Manufacturer: {record["Manufacturer"]}", $"Model:        {record["Model"]}", $"Serial:       {record["SerialNumber"]}", $"Capacity:     {record["Capacity"]}", $"Type:         {record["Type"]}"] };
         var note = new Label { Text = duplicate ? "This serial is already in the workbook. Change it or cancel this record." : record["SerialNumber"] == "N/A" ? "Serial N/A cannot be checked for duplicates." : "Review these values before saving a new row.", Bounds = new Rectangle(20, 188, 450, 48) };
         dialog.Controls.AddRange([summary, note]); string action = "Cancel";
         dialog.Shown += (_, _) => summary.Select(0, 0);
@@ -1099,7 +1134,7 @@ internal static class ManualValidation
         var listed = new[] { "B", "KB", "MB", "GB", "TB", "PB" }.Contains(unit);
         var type = edited["Type"];
         var known = DriveTypes.Options.Contains(type, StringComparer.OrdinalIgnoreCase);
-        var normalized = Create(edited["Make"] == "N/A" ? "" : edited["Make"], edited["Model"] == "N/A" ? "" : edited["Model"],
+        var normalized = Create(edited["Manufacturer"] == "N/A" ? "" : edited["Manufacturer"], edited["Model"] == "N/A" ? "" : edited["Model"],
             edited["SerialNumber"] == "N/A" ? "" : edited["SerialNumber"], match.Success ? match.Groups[1].Value : "",
             listed ? unit : match.Success ? "Other" : "", listed ? "" : unit, known ? type : "Other", known ? "" : type);
         foreach (var key in columns.Except(InventoryBook.Core))
@@ -1110,10 +1145,10 @@ internal static class ManualValidation
         }
         return normalized;
     }
-    public static DriveRecord Create(string make, string model, string serial, string amount, string unit, string customUnit, string type, string customType)
+    public static DriveRecord Create(string manufacturer, string model, string serial, string amount, string unit, string customUnit, string type, string customType)
     {
-        make = make.Trim(); model = model.Trim(); serial = serial.Trim(); amount = amount.Trim(); unit = unit.Trim(); customUnit = customUnit.Trim(); type = type.Trim(); customType = customType.Trim();
-        Check(make, @"\A[A-Za-z0-9][A-Za-z0-9 .&()+'/_-]{0,79}\z", 80, "Make");
+        manufacturer = manufacturer.Trim(); model = model.Trim(); serial = serial.Trim(); amount = amount.Trim(); unit = unit.Trim(); customUnit = customUnit.Trim(); type = type.Trim(); customType = customType.Trim();
+        Check(manufacturer, @"\A[A-Za-z0-9][A-Za-z0-9 .&()+'/_-]{0,79}\z", 80, "Manufacturer");
         Check(model, "\\A[A-Za-z0-9][A-Za-z0-9 .+/_\"-]{0,99}\\z", 100, "Model");
         Check(serial, @"\A[A-Za-z0-9][A-Za-z0-9./_-]{0,99}\z", 100, "Serial");
         string capacity = "N/A";
@@ -1126,7 +1161,7 @@ internal static class ManualValidation
             if (unit.Length > 0) capacity = n.ToString("0.######", CultureInfo.InvariantCulture) + " " + unit;
         }
         if (type == "Other") { Check(customType, @"\A[A-Za-z0-9][A-Za-z0-9 .()+/_-]{0,59}\z", 60, "Custom drive type"); type = customType; }
-        return new DriveRecord { ["Make"] = make, ["Model"] = model.ToUpperInvariant(), ["SerialNumber"] = serial.ToUpperInvariant(), ["Capacity"] = capacity, ["Type"] = type };
+        return new DriveRecord { ["Manufacturer"] = manufacturer, ["Model"] = model.ToUpperInvariant(), ["SerialNumber"] = serial.ToUpperInvariant(), ["Capacity"] = capacity, ["Type"] = type };
     }
     private static void Check(string value, string pattern, int max, string label) { if (value.Length > 0 && (value.Length > max || !Regex.IsMatch(value, pattern))) throw new ArgumentException($"{label}: use only plain letters, digits, spaces, or standard punctuation (up to {max} characters)."); }
 }

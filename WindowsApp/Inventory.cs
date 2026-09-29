@@ -27,7 +27,7 @@ internal sealed class DriveRecord
 internal sealed class InventoryBook
 {
     public static readonly (string Key, string Header)[] Catalog = [
-        ("Make", "Make"), ("Model", "Model"), ("SerialNumber", "Serial Number"),
+        ("Manufacturer", "Manufacturer"), ("Model", "Model"), ("SerialNumber", "Serial Number"),
         ("Capacity", "Reported Capacity"), ("Type", "Type"),
         ("Interface", "Interface"), ("FirmwareVersion", "Firmware Version"),
         ("ModelFamily", "Model Family"), ("FormFactor", "Form Factor"),
@@ -37,7 +37,7 @@ internal sealed class InventoryBook
         ("AtaVersion", "ATA Version"), ("SataVersion", "SATA Version"),
         ("Protocol", "Reported Protocol"), ("Transport", "Probe Transport")
     ];
-    public static readonly string[] Core = ["Make", "Model", "SerialNumber", "Capacity", "Type"];
+    public static readonly string[] Core = ["Manufacturer", "Model", "SerialNumber", "Capacity", "Type"];
     public List<string> Columns { get; private set; } = [..Core];
     public List<DriveRecord> Records { get; } = [];
     public string Path { get; }
@@ -50,51 +50,59 @@ internal sealed class InventoryBook
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
         if (!File.Exists(Path)) { Save(); return; }
-        using var archive = ZipFile.OpenRead(Path);
-        var sheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new InvalidDataException("Workbook has no first worksheet.");
-        var shared = new List<string>();
-        if (archive.GetEntry("xl/sharedStrings.xml") is { } strings)
+        bool legacyHeader;
         {
-            using var stream = strings.Open();
-            shared = XDocument.Load(stream).Descendants(X + "si")
-                .Select(si => string.Concat(si.Descendants(X + "t").Select(t => t.Value))).ToList();
-        }
-        using var sheetStream = sheet.Open();
-        var doc = XDocument.Load(sheetStream);
-        var rows = doc.Descendants(X + "sheetData").Elements(X + "row").ToList();
-        var header = rows.FirstOrDefault(r => (string?)r.Attribute("r") == "1") ?? throw new InvalidDataException("Workbook has no header row.");
-        var mapping = new Dictionary<string, string>();
-        var loaded = new List<string>();
-        foreach (var cell in header.Elements(X + "c"))
-        {
-            var label = CellText(cell, shared).Trim();
-            if (label.Length == 0) continue;
-            var match = Catalog.FirstOrDefault(c => c.Header == label || (label == "Capacity" && c.Key == "Capacity"));
-            if (match.Key is null || loaded.Contains(match.Key)) throw new InvalidDataException($"Unsupported or duplicate column '{label}'.");
-            var reference = (string?)cell.Attribute("r") ?? "";
-            if (!System.Text.RegularExpressions.Regex.IsMatch(reference, "^[A-Z]+1$")) throw new InvalidDataException("Invalid header cell reference.");
-            mapping[reference[..^1]] = match.Key;
-            loaded.Add(match.Key);
-        }
-        foreach (var key in Core) if (!loaded.Contains(key)) throw new InvalidDataException($"Required column '{Header(key)}' is missing.");
-        foreach (var row in rows.Skip(1))
-        {
-            var number = (string?)row.Attribute("r") ?? "";
-            if (!int.TryParse(number, out var rowNo) || rowNo <= 1) continue;
-            var record = new DriveRecord();
-            bool populated = false;
-            foreach (var key in loaded) record[key] = "N/A";
-            foreach (var cell in row.Elements(X + "c"))
+            using var archive = ZipFile.OpenRead(Path);
+            var sheet = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new InvalidDataException("Workbook has no first worksheet.");
+            var shared = new List<string>();
+            if (archive.GetEntry("xl/sharedStrings.xml") is { } strings)
             {
-                var reference = (string?)cell.Attribute("r") ?? "";
-                var column = System.Text.RegularExpressions.Regex.Match(reference, "^[A-Z]+(?=\\d+$)").Value;
-                var value = CellText(cell, shared);
-                if (mapping.TryGetValue(column, out var key)) { record[key] = value; populated |= value.Length > 0; }
-                else if (!string.IsNullOrWhiteSpace(value)) throw new InvalidDataException($"Data without a column header in row {rowNo}.");
+                using var stream = strings.Open();
+                shared = XDocument.Load(stream).Descendants(X + "si")
+                    .Select(si => string.Concat(si.Descendants(X + "t").Select(t => t.Value))).ToList();
             }
-            if (populated) Records.Add(record);
+            using var sheetStream = sheet.Open();
+            var doc = XDocument.Load(sheetStream);
+            var rows = doc.Descendants(X + "sheetData").Elements(X + "row").ToList();
+            var header = rows.FirstOrDefault(r => (string?)r.Attribute("r") == "1") ?? throw new InvalidDataException("Workbook has no header row.");
+            var mapping = new Dictionary<string, string>();
+            var loaded = new List<string>();
+            legacyHeader = false;
+            foreach (var cell in header.Elements(X + "c"))
+            {
+                var label = CellText(cell, shared).Trim();
+                if (label.Length == 0) continue;
+                // Older inventories called Manufacturer "Make". Read either header into
+                // the same field, then write the new header when the book is saved.
+                var match = Catalog.FirstOrDefault(c => c.Header == label || (label == "Make" && c.Key == "Manufacturer") || (label == "Capacity" && c.Key == "Capacity"));
+                if (match.Key is null || loaded.Contains(match.Key)) throw new InvalidDataException($"Unsupported or duplicate column '{label}'.");
+                var reference = (string?)cell.Attribute("r") ?? "";
+                if (!System.Text.RegularExpressions.Regex.IsMatch(reference, "^[A-Z]+1$")) throw new InvalidDataException("Invalid header cell reference.");
+                mapping[reference[..^1]] = match.Key;
+                loaded.Add(match.Key);
+                legacyHeader |= label == "Make";
+            }
+            foreach (var key in Core) if (!loaded.Contains(key)) throw new InvalidDataException($"Required column '{Header(key)}' is missing.");
+            foreach (var row in rows.Skip(1))
+            {
+                var number = (string?)row.Attribute("r") ?? "";
+                if (!int.TryParse(number, out var rowNo) || rowNo <= 1) continue;
+                var record = new DriveRecord();
+                bool populated = false;
+                foreach (var key in loaded) record[key] = "N/A";
+                foreach (var cell in row.Elements(X + "c"))
+                {
+                    var reference = (string?)cell.Attribute("r") ?? "";
+                    var column = System.Text.RegularExpressions.Regex.Match(reference, "^[A-Z]+(?=\\d+$)").Value;
+                    var value = CellText(cell, shared);
+                    if (mapping.TryGetValue(column, out var key)) { record[key] = value; populated |= value.Length > 0; }
+                    else if (!string.IsNullOrWhiteSpace(value)) throw new InvalidDataException($"Data without a column header in row {rowNo}.");
+                }
+                if (populated) Records.Add(record);
+            }
+            Columns = loaded;
         }
-        Columns = loaded;
+        if (legacyHeader) Save();
     }
     public static string Header(string key) => Catalog.First(c => c.Key == key).Header;
     private static string CellText(XElement cell, List<string> shared)
