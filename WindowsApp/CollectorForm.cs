@@ -690,9 +690,9 @@ internal sealed class CollectorForm : Form
             "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process",
             "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))] };
         var disclaimer = new Label { Text = "AI Workflow Notice: This project was written through AI prompting and reviewed by its maintainer. Check collected data against the drive label when accuracy matters.", Dock = DockStyle.Fill, Margin = Padding.Empty, ForeColor = Color.DimGray, Font = new Font("Segoe UI", 9), Padding = new Padding(2, 7, 0, 0) };
-        void OpenLink(string url)
+        void OpenLink(string? url)
         {
-            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
+            if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
             try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
             catch (Exception ex) { MessageBox.Show(dialog, ex.Message, "Open Link", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         }
