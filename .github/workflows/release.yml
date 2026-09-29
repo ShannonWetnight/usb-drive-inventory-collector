@@ -32,7 +32,8 @@ jobs:
           if ($env:RELEASE_REF -ne 'refs/heads/main') { throw 'Run the release workflow from main.' }
           if ($env:RELEASE_VERSION -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Use a version like vX.Y.Z.' }
           [xml]$project = Get-Content 'WindowsApp/USBDriveInventoryCollector.csproj'
-          if ($project.Project.PropertyGroup.Version -ne $env:RELEASE_VERSION.Substring(1)) { throw 'Release version does not match the application version.' }
+          $applicationVersion = [string]$project.Project.PropertyGroup.Version
+          if ($applicationVersion -ne $env:RELEASE_VERSION.Substring(1)) { throw "Requested release $env:RELEASE_VERSION, but the application version is v$applicationVersion. Update the application version or run the workflow with v$applicationVersion." }
           foreach ($name in @('SIGNING_ENDPOINT', 'SIGNING_ACCOUNT', 'SIGNING_PROFILE', 'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID')) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Missing release setting: $name" }
           }
