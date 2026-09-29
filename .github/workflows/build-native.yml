@@ -10,8 +10,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
       - name: Read application version
@@ -34,12 +34,12 @@ jobs:
           }
           python -m pip install --quiet openpyxl==3.1.5
           python -c "from openpyxl import load_workbook; import sys; w=load_workbook(sys.argv[1]); assert w.active['C2'].value == 'TEST-SERIAL'" $path
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Workbook-Compatibility-Sample-v${{ steps.app-version.outputs.version }}
           path: ${{ runner.temp }}/Collector-Workbook-Check.xlsx
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}-preview
           path: publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
