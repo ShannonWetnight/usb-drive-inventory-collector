@@ -39,8 +39,12 @@ internal sealed class DriveProbe
                 // An empty USB dock or card reader can still appear as a disk.
                 // Wait until Windows reports media with a usable size before probing.
                 var size = disk["Size"] is null ? 0UL : Convert.ToUInt64(disk["Size"]);
-                var status = disk["OperationalStatus"] is null ? 0 : Convert.ToInt32(disk["OperationalStatus"]);
-                if (size == 0 || status is DiskNotReady or DiskNoMedia or DiskNoContact or DiskLostCommunication) continue;
+                // WMI exposes this property as UInt16[] (often with several statuses).
+                // Check every value; converting the array itself throws InvalidCastException.
+                IEnumerable<int> statuses = disk["OperationalStatus"] is Array values
+                    ? values.Cast<object>().Select(Convert.ToInt32)
+                    : disk["OperationalStatus"] is object single ? [Convert.ToInt32(single)] : Enumerable.Empty<int>();
+                if (size == 0 || statuses.Any(status => status is DiskNotReady or DiskNoMedia or DiskNoContact or DiskLostCommunication)) continue;
                 result.Add(new UsbDisk(Convert.ToInt32(disk["Number"]), Value(disk["FriendlyName"]), Value(disk["SerialNumber"])));
             }
         }

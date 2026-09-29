@@ -9,7 +9,8 @@ namespace USBDriveInventoryCollector;
 internal sealed class CollectorForm : Form
 {
     private enum StatusTone { Default, Reading, Success, Warning, Error }
-    private enum DriveNotification { Saved, Duplicate, Error }
+    private enum DriveNotification { Saved, Duplicate, Error, TerminalEnabled, TerminalDisabled }
+    private static readonly Color NeutralStatusBackground = Color.FromArgb(246, 248, 251);
     private InventoryBook _book;
     private readonly AutoPlayGuard _autoPlay = new();
     private string _logPath;
@@ -19,12 +20,19 @@ internal sealed class CollectorForm : Form
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer _statusPulse = new() { Interval = 700 };
     private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 3000 };
+    private readonly System.Windows.Forms.Timer _statusFade = new() { Interval = 25 };
+    private readonly object _soundGate = new();
+    private CancellationTokenSource? _activeSound;
+    private DateTime _nextSoundAt;
+    private Panel? _statusPanel;
+    private Color _fadeFrom = NeutralStatusBackground, _fadeTo = NeutralStatusBackground;
+    private long _fadeStart;
     private bool _pulseBright, _soundsEnabled = CollectorSettings.SoundsEnabled();
     private StatusTone _statusTone;
     private DateTime _scanHoldUntil;
     private bool _busy, _paused, _modal, _updatingGrid, _viewChanged;
     private string _version = "N/A";
-    private readonly RichTextBox _status = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.None, BackColor = Color.FromArgb(246, 248, 251), Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
+    private readonly RichTextBox _status = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.None, BackColor = NeutralStatusBackground, Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
     private readonly Label _guidance = new() { Dock = DockStyle.Fill, Text = "Insert one drive at a time." };
     private readonly Label _recordCount = new() { AutoSize = false, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
     private readonly Label _workbookLocation = new() { AutoEllipsis = true, AutoSize = false, UseMnemonic = false, TextAlign = ContentAlignment.MiddleLeft };
@@ -46,7 +54,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _pause = new() { Text = "Pause Scanning", Width = 140 };
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
-    private readonly Button _sound = new() { Width = 36, Height = 34, Image = CreateSoundIcon(true), ImageAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
+    private readonly Button _sound = new() { Width = 36, Height = 34, Image = CreateSoundIcon(true), ImageAlign = ContentAlignment.MiddleCenter, Padding = Padding.Empty, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
     private readonly Button _refreshWorkbook = new() { Image = CreateRefreshIcon(), ImageAlign = ContentAlignment.MiddleCenter, AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Visible = true };
@@ -94,7 +102,7 @@ internal sealed class CollectorForm : Form
         UpdateSoundButton();
         _sound.Click += (_, _) =>
         {
-            try { CollectorSettings.SaveSoundsEnabled(!_soundsEnabled); _soundsEnabled = !_soundsEnabled; UpdateSoundButton(); }
+            try { CollectorSettings.SaveSoundsEnabled(!_soundsEnabled); _soundsEnabled = !_soundsEnabled; if (!_soundsEnabled) CancelSounds(); UpdateSoundButton(); }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Sound Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         };
         header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions);
@@ -109,7 +117,8 @@ internal sealed class CollectorForm : Form
         _finish.Width = _setup.Width;
         foreach (var b in new[] { _pause, _manual, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
-        var status = new Panel { Dock = DockStyle.Fill, Margin = new Padding(12, 4, 12, 4), BorderStyle = BorderStyle.Fixed3D, BackColor = Color.FromArgb(246, 248, 251) };
+        var status = new Panel { Dock = DockStyle.Fill, Margin = new Padding(12, 4, 12, 4), BorderStyle = BorderStyle.Fixed3D, BackColor = NeutralStatusBackground };
+        _statusPanel = status;
         _status.Dock = DockStyle.None; _guidance.Dock = DockStyle.None;
         _guidance.Padding = Padding.Empty; _guidance.TextAlign = ContentAlignment.MiddleLeft;
         status.Controls.Add(_status); status.Controls.Add(_guidance);
@@ -148,7 +157,7 @@ internal sealed class CollectorForm : Form
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
             _terminalToggle.Height = 28;
             _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
-            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 1, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
+            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 8, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
             _resetView.Location = new Point(_refreshWorkbook.Left - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
@@ -213,6 +222,7 @@ internal sealed class CollectorForm : Form
             _pulseBright = !_pulseBright;
             ColorizeStatus();
         };
+        _statusFade.Tick += (_, _) => AdvanceStatusFade();
         _successDisplay.Tick += (_, _) =>
         {
             _successDisplay.Stop();
@@ -220,7 +230,7 @@ internal sealed class CollectorForm : Form
             Activity(_paused ? "Scanning is paused." : _terminalSession is null ? "Waiting for a USB drive..." : "Terminal opened.");
         };
         Shown += async (_, _) => await InitializeAsync();
-        FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _successDisplay.Stop(); _closing.Cancel(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
+        FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _statusFade.Stop(); _successDisplay.Stop(); _closing.Cancel(); CancelSounds(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
     private static Bitmap CreateRefreshIcon()
@@ -236,8 +246,9 @@ internal sealed class CollectorForm : Form
     }
     private static Bitmap CreateSoundIcon(bool enabled)
     {
-        var icon = new Bitmap(20, 20);
+        var icon = new Bitmap(24, 24);
         using var graphics = Graphics.FromImage(icon);
+        graphics.TranslateTransform(2, 2);
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.Clear(Color.Transparent);
         using var fill = new SolidBrush(Color.White);
@@ -260,6 +271,7 @@ internal sealed class CollectorForm : Form
     private void SetScanningPaused(bool paused)
     {
         _paused = paused;
+        if (paused) CancelSounds();
         _pause.Text = paused ? "Resume Scanning" : "Pause Scanning";
         _terminalSession?.SetPaused(paused);
         if (_terminalSession is not null) WriteTerminalOutput(_terminalGeneration, paused ? "Scanning paused from the main window. Press [P] or Resume Scanning to continue.\n" : "Scanning resumed from the main window.\n");
@@ -269,6 +281,7 @@ internal sealed class CollectorForm : Form
     {
         _statusPulse.Stop(); _successDisplay.Stop();
         _statusTone = tone == StatusTone.Default ? level == "ERROR" ? StatusTone.Error : level == "WARN" && text.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ? StatusTone.Warning : StatusTone.Default : tone;
+        FadeStatusBackground(_statusTone);
         var display = _terminalSession is not null && !text.StartsWith("Terminal closed.", StringComparison.Ordinal) &&
             !text.Contains("Scanning is paused", StringComparison.Ordinal)
             ? text + (_paused ? " Scanning is paused in Terminal and this window." : " Scanning is paused in this window.") : text;
@@ -304,25 +317,82 @@ internal sealed class CollectorForm : Form
         }
         _status.Select(0, 0);
     }
+    private void FadeStatusBackground(StatusTone tone)
+    {
+        var target = tone switch
+        {
+            StatusTone.Reading => Color.FromArgb(222, 234, 246),
+            StatusTone.Warning => Color.FromArgb(250, 240, 209),
+            StatusTone.Error => Color.FromArgb(250, 226, 227),
+            _ => NeutralStatusBackground
+        };
+        if (target == _fadeTo) return; // Text pulsing must not restart the background transition.
+        _fadeFrom = _statusPanel?.BackColor ?? NeutralStatusBackground;
+        _fadeTo = target;
+        _fadeStart = Stopwatch.GetTimestamp();
+        _statusFade.Start();
+    }
+    private void AdvanceStatusFade()
+    {
+        if (_statusPanel is null) return;
+        var progress = Math.Clamp(Stopwatch.GetElapsedTime(_fadeStart).TotalMilliseconds / 300.0, 0, 1);
+        var eased = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.Pow(-2 * progress + 2, 3) / 2;
+        byte Channel(byte a, byte b) => (byte)Math.Round(a + (b - a) * eased);
+        var color = Color.FromArgb(Channel(_fadeFrom.R, _fadeTo.R), Channel(_fadeFrom.G, _fadeTo.G), Channel(_fadeFrom.B, _fadeTo.B));
+        _statusPanel.BackColor = color;
+        _status.BackColor = color;
+        if (progress >= 1) _statusFade.Stop();
+    }
+    private void CancelSounds()
+    {
+        lock (_soundGate) { _activeSound?.Cancel(); _activeSound = null; }
+    }
     private void PlayDriveNotification(DriveNotification notification)
     {
-        if (!_soundsEnabled) return;
-        // Keep the distinct console beep patterns from the original collector.
-        // Running them on a worker keeps the UI responsive during the tones.
+        var terminalConfirmation = notification is DriveNotification.TerminalEnabled or DriveNotification.TerminalDisabled;
+        if (!_soundsEnabled || _closing.IsCancellationRequested || (_paused && !terminalConfirmation)) return;
+        // One sound sequence at a time. Drop repeat events within one second rather
+        // than queueing beeps that might play after a pause or a burst of errors.
         var tones = notification switch
         {
             DriveNotification.Saved => new[] { (1000, 150), (1200, 150) },
             DriveNotification.Duplicate => new[] { (500, 400) },
             DriveNotification.Error => new[] { (400, 220), (300, 320) },
+            DriveNotification.TerminalEnabled => new[] { (750, 140), (1050, 170) },
+            DriveNotification.TerminalDisabled => new[] { (1050, 140), (750, 170) },
             _ => new[] { (800, 150) }
         };
-        _ = Task.Run(() =>
+        CancellationTokenSource source;
+        TimeSpan wait;
+        lock (_soundGate)
+        {
+            var now = DateTime.UtcNow;
+            if (now < _nextSoundAt && !terminalConfirmation) return;
+            var startAt = now < _nextSoundAt ? _nextSoundAt : now;
+            wait = startAt - now;
+            _activeSound?.Cancel();
+            _activeSound = source = new CancellationTokenSource();
+            _nextSoundAt = startAt.AddSeconds(1);
+        }
+        _ = Task.Run(async () =>
         {
             try
             {
-                foreach (var (frequency, duration) in tones) Console.Beep(frequency, duration);
+                if (wait > TimeSpan.Zero) await Task.Delay(wait, source.Token);
+                foreach (var (frequency, duration) in tones)
+                {
+                    source.Token.ThrowIfCancellationRequested();
+                    Console.Beep(frequency, duration);
+                    await Task.Delay(120, source.Token);
+                }
             }
-            catch { }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Log("Sound playback failed: " + ex.Message); }
+            finally
+            {
+                lock (_soundGate) { if (ReferenceEquals(_activeSound, source)) _activeSound = null; }
+                source.Dispose();
+            }
         });
     }
     private static async Task CopyWorkbookPathAsync(string path, Button button, IWin32Window owner)
@@ -578,19 +648,19 @@ internal sealed class CollectorForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        var title = new Label { Text = $"USB Drive Inventory Collector v{Application.ProductVersion}", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 10, FontStyle.Bold) };
-        var maintainer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        var title = new Label { Text = $"USB Drive Inventory Collector v{Application.ProductVersion}", Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(2, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 10, FontStyle.Bold) };
+        var maintainer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(2, 0, 0, 0) };
         maintainer.Controls.Add(new Label { Text = "Maintainer: Shannon Wetnight |", AutoSize = true, Font = new Font("Consolas", 10), Margin = new Padding(0, 4, 7, 0) });
         var website = new LinkLabel { Text = "shannonwetnight.com", AutoSize = true, Font = new Font("Consolas", 10), Margin = new Padding(0, 4, 0, 0) };
         maintainer.Controls.Add(website);
-        var info = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, DetectUrls = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
+        var info = new RichTextBox { Dock = DockStyle.Fill, Margin = Padding.Empty, BorderStyle = BorderStyle.None, ReadOnly = true, TabStop = false, DetectUrls = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
             "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector",
             $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}",
             "Scope: USB physical drives with media; boot and system disks excluded",
             "Transport: smartctl autodetection plus USB adapter fallbacks",
             "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process",
             "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))] };
-        var disclaimer = new Label { Text = "AI Workflow Notice: This project was written through AI prompting and reviewed by its maintainer. Check collected data against the drive label when accuracy matters.", Dock = DockStyle.Fill, ForeColor = Color.DimGray, Font = new Font("Segoe UI", 9), Padding = new Padding(0, 7, 0, 0) };
+        var disclaimer = new Label { Text = "AI Workflow Notice: This project was written through AI prompting and reviewed by its maintainer. Check collected data against the drive label when accuracy matters.", Dock = DockStyle.Fill, Margin = Padding.Empty, ForeColor = Color.DimGray, Font = new Font("Segoe UI", 9), Padding = new Padding(2, 7, 0, 0) };
         void OpenLink(string url)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
@@ -615,7 +685,7 @@ internal sealed class CollectorForm : Form
         _terminalSession = TerminalCollector.ForEmbedded(io, _paused, paused =>
         {
             if (IsDisposed || !IsHandleCreated) return;
-            BeginInvoke((Action)(() => { if (!IsDisposed) { _paused = paused; _pause.Text = paused ? "Resume Scanning" : "Pause Scanning"; Activity(paused ? "Terminal scanning paused." : "Terminal scanning resumed."); } }));
+            BeginInvoke((Action)(() => { if (!IsDisposed) { _paused = paused; if (paused) CancelSounds(); _pause.Text = paused ? "Resume Scanning" : "Pause Scanning"; Activity(paused ? "Terminal scanning paused." : "Terminal scanning resumed."); } }));
         });
         var generation = ++_terminalGeneration;
         _terminalOutput.Clear(); _terminalInput.Clear(); _terminalInput.PlaceholderText = "Command or response"; _terminalInput.Enabled = true; _terminalInputFrame.BackColor = SystemColors.Window; _terminalSend.Enabled = true;
@@ -630,6 +700,7 @@ internal sealed class CollectorForm : Form
         try
         {
             Activity("Terminal opened.");
+            PlayDriveNotification(DriveNotification.TerminalEnabled);
             await Task.Run(_terminalSession.RunEmbedded);
             if (_closing.IsCancellationRequested) return;
             var updated = new InventoryBook(CollectorSettings.WorkbookPath());
@@ -655,6 +726,7 @@ internal sealed class CollectorForm : Form
                 _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage);
             }
             _modal = false;
+            if (!_closing.IsCancellationRequested) PlayDriveNotification(DriveNotification.TerminalDisabled);
             if (!_closing.IsCancellationRequested) _timer.Start();
         }
     }
@@ -909,7 +981,7 @@ internal sealed class CollectorForm : Form
         var note = new Label { Text = duplicate ? "This serial is already in the workbook. Change it or cancel this record." : record["SerialNumber"] == "N/A" ? "Serial N/A cannot be checked for duplicates." : "Review these values before saving a new row.", Bounds = new Rectangle(20, 188, 450, 48) };
         dialog.Controls.AddRange([summary, note]); string action = "Cancel";
         dialog.Shown += (_, _) => summary.Select(0, 0);
-        Button Choice(string name, string text, int x, int width) { var button = Button(text, x, 272, width); button.Click += (_, _) => { action = name; dialog.Close(); }; dialog.Controls.Add(button); return button; }
+        Button Choice(string name, string text, int x, int width) { var button = Button(text, x, 272, width); button.UseMnemonic = false; button.Click += (_, _) => { action = name; dialog.Close(); }; dialog.Controls.Add(button); return button; }
         if (duplicate) { Choice("Serial", "Change Serial", 118, 120); Choice("Cancel", "Cancel", 252, 120); }
         else
         {
