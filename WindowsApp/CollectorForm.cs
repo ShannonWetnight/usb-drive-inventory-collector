@@ -949,7 +949,7 @@ internal sealed class CollectorForm : Form
             var customUnitLabel = new Label { Text = "Custom Capacity Unit", Bounds = new Rectangle(20, 219, 195, 26) };
             var customUnit = Box(219, 219, 320);
             var typeLabel = new Label { Text = "5. Drive Type", Bounds = new Rectangle(20, 219, 195, 26) };
-            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
+            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
             var types = DriveTypes.Options;
             type.Items.AddRange(types.Cast<object>().ToArray());
             type.SelectedIndex = 0;
@@ -968,19 +968,29 @@ internal sealed class CollectorForm : Form
             unit.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             type.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             var updatingTypeOptions = false;
+            var latestTypeQuery = "";
             type.TextUpdate += (_, _) =>
             {
                 if (updatingTypeOptions) return;
-                var query = type.Text; var caret = type.SelectionStart;
+                var query = type.Text;
+                latestTypeQuery = query;
                 type.DroppedDown = false;
                 updatingTypeOptions = true;
                 try
                 {
                     type.BeginUpdate(); type.Items.Clear(); type.Items.AddRange(DriveTypes.Matches(query).Cast<object>().ToArray()); type.EndUpdate();
-                    type.Text = query; type.SelectionStart = caret; SizeTypeDropdown();
+                    SizeTypeDropdown();
+                    type.DroppedDown = true;
+                    // Reopening the native ComboBox can select the matching text. Clear that
+                    // selection after opening so the next key extends the user's query.
+                    type.Text = query; type.SelectionStart = query.Length; type.SelectionLength = 0;
                 }
                 finally { updatingTypeOptions = false; }
-                type.DroppedDown = true;
+                type.BeginInvoke((Action)(() =>
+                {
+                    if (type.IsDisposed || !type.Focused || latestTypeQuery != query || type.SelectionLength == 0) return;
+                    type.Text = query; type.SelectionStart = query.Length; type.SelectionLength = 0;
+                }));
                 UpdateManualLayout();
             };
             dialog.Controls.AddRange([make, model, serial, amount, unit, customUnitLabel, customUnit, typeLabel, type, customTypeLabel, customType]);
