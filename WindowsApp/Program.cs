@@ -1,8 +1,10 @@
 using Microsoft.Win32;
 using System.Management;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
+using System.Xml.Linq;
 
 namespace USBDriveInventoryCollector;
 
@@ -20,10 +22,31 @@ internal static class Program
             {
                 var book = new InventoryBook(args[1]);
                 book.OpenOrCreate();
-                var sample = new DriveRecord { ["Make"] = "Example", ["Model"] = "TEST-DRIVE", ["SerialNumber"] = "TEST-SERIAL", ["Capacity"] = "1 TB", ["Type"] = "SATA HDD" };
+                var sample = new DriveRecord { ["Manufacturer"] = "Example", ["Model"] = "TEST-DRIVE", ["SerialNumber"] = "TEST-SERIAL", ["Capacity"] = "1 TB", ["Type"] = "SATA HDD" };
                 book.Add(sample);
                 var reopened = new InventoryBook(args[1]); reopened.OpenOrCreate();
-                if (reopened.Records.Count != 1 || reopened.Records[0]["SerialNumber"] != "TEST-SERIAL") throw new InvalidDataException("Workbook round trip failed.");
+                if (reopened.Records.Count != 1 || reopened.Records[0]["SerialNumber"] != "TEST-SERIAL" || reopened.Records[0]["Manufacturer"] != "Example") throw new InvalidDataException("Workbook round trip failed.");
+                var legacyPath = Path.Combine(Path.GetDirectoryName(args[1])!, "Collector-Legacy-Workbook-Check.xlsx");
+                File.Copy(args[1], legacyPath, true);
+                using (var archive = ZipFile.Open(legacyPath, ZipArchiveMode.Update))
+                {
+                    var sheet = archive.GetEntry("xl/worksheets/sheet1.xml")!;
+                    XDocument xml;
+                    using (var stream = sheet.Open()) xml = XDocument.Load(stream);
+                    var header = xml.Descendants().First(c => c.Name.LocalName == "c" && (string?)c.Attribute("r") == "A1");
+                    header.Descendants().First(t => t.Name.LocalName == "t").Value = "Make";
+                    sheet.Delete();
+                    using var output = archive.CreateEntry("xl/worksheets/sheet1.xml").Open();
+                    xml.Save(output);
+                }
+                var legacy = new InventoryBook(legacyPath); legacy.OpenOrCreate();
+                if (legacy.Records.Count != 1 || legacy.Records[0]["Manufacturer"] != "Example" || legacy.Columns[0] != "Manufacturer") throw new InvalidDataException("Legacy workbook import failed.");
+                using (var archive = ZipFile.OpenRead(legacyPath))
+                using (var stream = archive.GetEntry("xl/worksheets/sheet1.xml")!.Open())
+                {
+                    var migrated = XDocument.Load(stream);
+                    if (!migrated.Descendants().Any(t => t.Name.LocalName == "t" && t.Value == "Manufacturer") || migrated.Descendants().Any(t => t.Name.LocalName == "t" && t.Value == "Make")) throw new InvalidDataException("Legacy header migration failed.");
+                }
             }
             catch (Exception ex) { File.WriteAllText(args[1] + ".error.txt", ex.ToString()); Environment.ExitCode = 1; }
             return;

@@ -112,7 +112,7 @@ internal sealed class DriveProbe
                     if ((model == "N/A" && serial == "N/A") || capacity == "N/A") { outcomes[transport] = "identity incomplete"; continue; }
                     var protocol = Prop(root, "device", "protocol");
                     var record = new DriveRecord {
-                        ["Make"] = Make(model), ["Model"] = model, ["SerialNumber"] = serial,
+                        ["Manufacturer"] = Manufacturer(model), ["Model"] = model, ["SerialNumber"] = serial,
                         ["Capacity"] = capacity, ["Type"] = Type(root, model), ["Interface"] = Interface(root, model),
                         ["Protocol"] = protocol, ["Transport"] = transport,
                         ["FirmwareVersion"] = Prop(root, "firmware_version"), ["ModelFamily"] = Prop(root, "model_family"),
@@ -210,14 +210,14 @@ internal sealed class DriveProbe
         if (solid || rotational) return size + (solid ? "SSD" : "HDD");
         return "N/A";
     }
-    private static string Make(string model)
+    private static string Manufacturer(string model)
     {
-        (string Pattern, string Make)[] patterns = [
+        (string Pattern, string Manufacturer)[] patterns = [
             (@"^LENSE", "Lenovo"), (@"Samsung|^MZ[A-Z0-9]", "Samsung"), (@"SK[\s_-]*hynix|^HFS|^HFM", "SK hynix"),
             (@"KIOXIA|^KBG|^KXG", "KIOXIA"), (@"TOSHIBA|^THNS", "Toshiba"), (@"Western Digital|WDC|^WDS", "Western Digital"),
             (@"SanDisk", "SanDisk"), (@"Micron|^MTFD", "Micron"), (@"Crucial", "Crucial"), (@"KINGSTON", "Kingston"),
             (@"Intel|^SSDPE|^SSDSC", "Intel"), (@"Solidigm", "Solidigm"), (@"LITEON|LITE-ON", "Lite-On"),
             (@"ADATA", "ADATA"), (@"Seagate|^ST[0-9]", "Seagate"), (@"Hitachi|HGST", "HGST"), (@"PNY", "PNY"), (@"Transcend", "Transcend")];
-        return patterns.FirstOrDefault(p => Regex.IsMatch(model, p.Pattern, RegexOptions.IgnoreCase)).Make ?? "N/A";
+        return patterns.FirstOrDefault(p => Regex.IsMatch(model, p.Pattern, RegexOptions.IgnoreCase)).Manufacturer ?? "N/A";
     }
 }
