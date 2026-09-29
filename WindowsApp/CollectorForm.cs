@@ -22,7 +22,7 @@ internal sealed class CollectorForm : Form
     private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 3000 };
     private readonly System.Windows.Forms.Timer _statusFade = new() { Interval = 25 };
     private readonly object _soundGate = new();
-    private CancellationTokenSource? _activeSound;
+    private readonly HashSet<CancellationTokenSource> _pendingSounds = [];
     private DateTime _nextSoundAt;
     private Panel? _statusPanel;
     private Color _fadeFrom = NeutralStatusBackground, _fadeTo = NeutralStatusBackground;
@@ -157,7 +157,7 @@ internal sealed class CollectorForm : Form
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
             _terminalToggle.Height = 28;
             _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
-            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 8, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
+            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 1, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
             _resetView.Location = new Point(_refreshWorkbook.Left - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
@@ -246,9 +246,8 @@ internal sealed class CollectorForm : Form
     }
     private static Bitmap CreateSoundIcon(bool enabled)
     {
-        var icon = new Bitmap(24, 24);
+        var icon = new Bitmap(20, 20);
         using var graphics = Graphics.FromImage(icon);
-        graphics.TranslateTransform(2, 2);
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         graphics.Clear(Color.Transparent);
         using var fill = new SolidBrush(Color.White);
@@ -345,7 +344,7 @@ internal sealed class CollectorForm : Form
     }
     private void CancelSounds()
     {
-        lock (_soundGate) { _activeSound?.Cancel(); _activeSound = null; }
+        lock (_soundGate) foreach (var source in _pendingSounds) source.Cancel();
     }
     private void PlayDriveNotification(DriveNotification notification)
     {
@@ -370,8 +369,8 @@ internal sealed class CollectorForm : Form
             if (now < _nextSoundAt && !terminalConfirmation) return;
             var startAt = now < _nextSoundAt ? _nextSoundAt : now;
             wait = startAt - now;
-            _activeSound?.Cancel();
-            _activeSound = source = new CancellationTokenSource();
+            source = new CancellationTokenSource();
+            _pendingSounds.Add(source);
             _nextSoundAt = startAt.AddSeconds(1);
         }
         _ = Task.Run(async () =>
@@ -390,7 +389,7 @@ internal sealed class CollectorForm : Form
             catch (Exception ex) { Log("Sound playback failed: " + ex.Message); }
             finally
             {
-                lock (_soundGate) { if (ReferenceEquals(_activeSound, source)) _activeSound = null; }
+                lock (_soundGate) _pendingSounds.Remove(source);
                 source.Dispose();
             }
         });
@@ -519,22 +518,41 @@ internal sealed class CollectorForm : Form
             Activity($"USB drive detected on Disk {disk.Number}. Reading drive identity...", tone: StatusTone.Reading);
             _guidance.Text = "Reading drive identity. Slow adapters may reach the 30-second timeout.";
             await Task.Delay(2000, _closing.Token);
+            DriveRecord record;
             try
             {
-                var record = await _probe.IdentifyAsync(disk, _closing.Token);
+                record = await _probe.IdentifyAsync(disk, _closing.Token);
                 if (_closing.IsCancellationRequested) return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Activity($"Disk {disk.Number} identity could not be read: {ex.Message}", "ERROR");
+                _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry.";
+                PlayDriveNotification(DriveNotification.Error);
+                _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
+                Log(ex.ToString());
+                return;
+            }
+            try
+            {
                 if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; PlayDriveNotification(DriveNotification.Duplicate); }
-                else { var row = _book.Add(record); RefreshGrid(); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; PlayDriveNotification(DriveNotification.Saved); }
+                else { var row = _book.Add(record); RefreshGrid(latestNumberAtTop: true); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; PlayDriveNotification(DriveNotification.Saved); }
                 _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
-            { Activity($"Disk {disk.Number} could not be read: {ex.Message}", "ERROR"); _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry."; PlayDriveNotification(DriveNotification.Error); _scanHoldUntil = DateTime.UtcNow.AddSeconds(3); Log(ex.ToString()); }
+            {
+                Activity($"Disk {disk.Number} was identified, but the workbook could not be updated ({ex.GetType().Name}): {ex.Message}", "ERROR");
+                _guidance.Text = "Check the workbook save location and file access before continuing.";
+                PlayDriveNotification(DriveNotification.Error);
+                _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
+                Log(ex.ToString());
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); PlayDriveNotification(DriveNotification.Error); Log(ex.ToString()); }
         finally { _busy = false; }
     }
-    private void RefreshGrid(bool preserveSort = true)
+    private void RefreshGrid(bool preserveSort = true, bool latestNumberAtTop = false)
     {
         var wasUpdating = _updatingGrid;
         _updatingGrid = true;
@@ -542,6 +560,7 @@ internal sealed class CollectorForm : Form
         {
             var sortKey = preserveSort ? _grid.SortedColumn?.Name : null;
             var sortOrder = _grid.SortOrder;
+            if (latestNumberAtTop && sortKey == "RecordNumber") sortOrder = SortOrder.Descending;
             _grid.Columns.Clear();
             _grid.ColumnHeadersHeight = 34;
             _grid.RowTemplate.Height = MinimumRowHeight();
@@ -648,12 +667,15 @@ internal sealed class CollectorForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        var title = new Label { Text = $"USB Drive Inventory Collector v{Application.ProductVersion}", Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(2, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 10, FontStyle.Bold) };
+        var displayVersion = Application.ProductVersion.Split('+', 2)[0];
+        var title = new Label { Text = $"USB Drive Inventory Collector v{displayVersion}", Dock = DockStyle.Fill, Margin = Padding.Empty, Padding = new Padding(2, 0, 0, 0), TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Consolas", 10, FontStyle.Bold) };
         var maintainer = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(2, 0, 0, 0) };
         maintainer.Controls.Add(new Label { Text = "Maintainer: Shannon Wetnight |", AutoSize = true, Font = new Font("Consolas", 10), Margin = new Padding(0, 4, 7, 0) });
         var website = new LinkLabel { Text = "shannonwetnight.com", AutoSize = true, Font = new Font("Consolas", 10), Margin = new Padding(0, 4, 0, 0) };
         maintainer.Controls.Add(website);
-        var info = new RichTextBox { Dock = DockStyle.Fill, Margin = Padding.Empty, BorderStyle = BorderStyle.None, ReadOnly = true, TabStop = false, DetectUrls = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
+        var executableName = Path.GetFileName(Environment.ProcessPath ?? "USB-Drive-Inventory-Collector.exe");
+        var info = new RichTextBox { Dock = DockStyle.Fill, Margin = Padding.Empty, BorderStyle = BorderStyle.Fixed3D, ReadOnly = true, TabStop = false, DetectUrls = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
+            $"Executable: {executableName}",
             "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector",
             $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}",
             "Scope: USB physical drives with media; boot and system disks excluded",
@@ -674,6 +696,16 @@ internal sealed class CollectorForm : Form
         dialog.Shown += (_, _) => info.Select(0, 0);
         dialog.ShowDialog(this);
     }
+    private void SetTerminalIndicator(bool enabled)
+    {
+        _terminalToggle.Text = enabled ? "Disable Terminal" : "Enable Terminal";
+        _terminalToggle.AccessibleName = enabled ? "Disable Terminal" : "Enable Terminal";
+        _terminalToggle.FlatStyle = enabled ? FlatStyle.Flat : FlatStyle.Standard;
+        _terminalToggle.UseVisualStyleBackColor = !enabled;
+        _terminalToggle.BackColor = enabled ? Color.Firebrick : SystemColors.Control;
+        _terminalToggle.ForeColor = enabled ? Color.White : SystemColors.ControlText;
+        _toolTip.SetToolTip(_terminalToggle, enabled ? "Terminal is enabled. Click to close it." : "Terminal is disabled. Click to open it.");
+    }
     private async Task OpenTerminalAsync()
     {
         if (_terminalSession is not null) { _terminalSession.Stop(); return; }
@@ -690,17 +722,15 @@ internal sealed class CollectorForm : Form
         var generation = ++_terminalGeneration;
         _terminalOutput.Clear(); _terminalInput.Clear(); _terminalInput.PlaceholderText = "Command or response"; _terminalInput.Enabled = true; _terminalInputFrame.BackColor = SystemColors.Window; _terminalSend.Enabled = true;
         _manual.Enabled = false; _setup.Enabled = false;
-        _terminalToggle.Text = "Disable Terminal";
-        _terminalToggle.FlatStyle = FlatStyle.Flat; _terminalToggle.UseVisualStyleBackColor = false;
-        _terminalToggle.BackColor = Color.Firebrick; _terminalToggle.ForeColor = Color.White;
+        SetTerminalIndicator(true);
         _tabs.SelectedTab = _terminalPage;
         BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(io, _terminalIO)) _terminalInput.Focus(); }));
         io.Output += value => WriteTerminalOutput(generation, value);
         io.Cleared += () => ClearTerminalOutput(generation);
         try
         {
-            Activity("Terminal opened.");
             PlayDriveNotification(DriveNotification.TerminalEnabled);
+            Activity("Terminal opened.");
             await Task.Run(_terminalSession.RunEmbedded);
             if (_closing.IsCancellationRequested) return;
             var updated = new InventoryBook(CollectorSettings.WorkbookPath());
@@ -719,10 +749,9 @@ internal sealed class CollectorForm : Form
             _terminalSession = null; _terminalIO = null;
             if (!IsDisposed)
             {
-                _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalInputFrame.BackColor = SystemColors.Control; _terminalSend.Enabled = false; _terminalToggle.Text = "Enable Terminal";
+                _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalInputFrame.BackColor = SystemColors.Control; _terminalSend.Enabled = false;
                 _manual.Enabled = true; _setup.Enabled = true;
-                _terminalToggle.FlatStyle = FlatStyle.Standard; _terminalToggle.UseVisualStyleBackColor = true;
-                _terminalToggle.BackColor = SystemColors.Control; _terminalToggle.ForeColor = SystemColors.ControlText;
+                SetTerminalIndicator(false);
                 _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage);
             }
             _modal = false;
@@ -946,7 +975,7 @@ internal sealed class CollectorForm : Form
                     var action = Review(record, duplicate);
                     if (action == "Serial") { serial.Focus(); serial.SelectAll(); return; }
                     if (action == "Cancel") return;
-                    var row = _book.Add(record); RefreshGrid(); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); PlayDriveNotification(DriveNotification.Saved);
+                    var row = _book.Add(record); RefreshGrid(latestNumberAtTop: true); Activity($"Manual drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); PlayDriveNotification(DriveNotification.Saved);
                     MessageBox.Show(dialog, $"Drive saved as row {row}.", "Drive Recorded", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     copy.Enabled = true;
                     serial.Clear();

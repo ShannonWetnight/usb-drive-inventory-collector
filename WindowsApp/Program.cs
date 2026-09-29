@@ -2,6 +2,7 @@ using Microsoft.Win32;
 using System.Management;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Text;
 
 namespace USBDriveInventoryCollector;
 
@@ -12,6 +13,7 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         if (args.Length == 2 && args[0] == "--verify-workbook")
         {
             try

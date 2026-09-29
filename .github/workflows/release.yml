@@ -42,7 +42,7 @@ jobs:
           dotnet-version: 8.0.x
       - name: Publish Windows x64 executable
         shell: pwsh
-        run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
+        run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
       - name: Azure login with OpenID Connect
         uses: azure/login@v3
         with:
