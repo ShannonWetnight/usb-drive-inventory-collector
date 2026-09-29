@@ -8,7 +8,7 @@ namespace USBDriveInventoryCollector;
 
 internal sealed class CollectorForm : Form
 {
-    private enum StatusTone { Default, Reading, Success, Warning, Error }
+    private enum StatusTone { Default, Reading, Success, Warning, Error, Paused }
     private enum DriveNotification { Saved, Duplicate, Error, TerminalEnabled, TerminalDisabled }
     private static readonly Color NeutralStatusBackground = Color.FromArgb(246, 248, 251);
     private InventoryBook _book;
@@ -17,9 +17,10 @@ internal sealed class CollectorForm : Form
     private DriveProbe? _probe;
     private readonly HashSet<int> _connected = [];
     private readonly CancellationTokenSource _closing = new();
+    private CancellationTokenSource? _activeScan;
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer _statusPulse = new() { Interval = 700 };
-    private readonly System.Windows.Forms.Timer _successDisplay = new() { Interval = 3000 };
+    private readonly System.Windows.Forms.Timer _statusDisplay = new() { Interval = 4000 };
     private readonly System.Windows.Forms.Timer _statusFade = new() { Interval = 25 };
     private readonly object _soundGate = new();
     private readonly HashSet<CancellationTokenSource> _pendingSounds = [];
@@ -30,7 +31,7 @@ internal sealed class CollectorForm : Form
     private bool _pulseBright, _soundsEnabled = CollectorSettings.SoundsEnabled();
     private StatusTone _statusTone;
     private DateTime _scanHoldUntil;
-    private bool _busy, _paused, _modal, _updatingGrid, _viewChanged;
+    private bool _busy, _identifying, _paused, _modal, _terminalStarting, _updatingGrid, _viewChanged;
     private string _version = "N/A";
     private readonly RichTextBox _status = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BorderStyle = BorderStyle.None, ScrollBars = RichTextBoxScrollBars.None, BackColor = NeutralStatusBackground, Font = new Font("Segoe UI", 12, FontStyle.Bold), Text = "Initializing..." };
     private readonly Label _guidance = new() { Dock = DockStyle.Fill, Text = "Insert one drive at a time." };
@@ -223,14 +224,14 @@ internal sealed class CollectorForm : Form
             ColorizeStatus();
         };
         _statusFade.Tick += (_, _) => AdvanceStatusFade();
-        _successDisplay.Tick += (_, _) =>
+        _statusDisplay.Tick += (_, _) =>
         {
-            _successDisplay.Stop();
-            if (_busy || _modal) { _successDisplay.Start(); return; }
+            _statusDisplay.Stop();
+            if (_busy || _modal) { _statusDisplay.Start(); return; }
             Activity(_paused ? "Scanning is paused." : _terminalSession is null ? "Waiting for a USB drive..." : "Terminal opened.");
         };
         Shown += async (_, _) => await InitializeAsync();
-        FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _statusFade.Stop(); _successDisplay.Stop(); _closing.Cancel(); CancelSounds(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
+        FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _statusFade.Stop(); _statusDisplay.Stop(); _closing.Cancel(); CancelSounds(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
     private static Bitmap CreateRefreshIcon()
@@ -278,8 +279,8 @@ internal sealed class CollectorForm : Form
     }
     private void Activity(string text, string level = "INFO", StatusTone tone = StatusTone.Default)
     {
-        _statusPulse.Stop(); _successDisplay.Stop();
-        _statusTone = tone == StatusTone.Default ? level == "ERROR" ? StatusTone.Error : level == "WARN" && text.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ? StatusTone.Warning : StatusTone.Default : tone;
+        _statusPulse.Stop(); _statusDisplay.Stop();
+        _statusTone = tone == StatusTone.Default ? level == "ERROR" ? StatusTone.Error : level == "WARN" && text.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ? StatusTone.Warning : _paused ? StatusTone.Paused : StatusTone.Default : tone;
         FadeStatusBackground(_statusTone);
         var display = _terminalSession is not null && !text.StartsWith("Terminal closed.", StringComparison.Ordinal) &&
             !text.Contains("Scanning is paused", StringComparison.Ordinal)
@@ -290,7 +291,7 @@ internal sealed class CollectorForm : Form
         _pulseBright = false;
         ColorizeStatus();
         if (_statusTone is StatusTone.Reading or StatusTone.Warning or StatusTone.Error) _statusPulse.Start();
-        if (_statusTone == StatusTone.Success) _successDisplay.Start();
+        if (_statusTone is StatusTone.Success or StatusTone.Warning or StatusTone.Error) _statusDisplay.Start();
         _activity.Items.Insert(0, $"{DateTime.Now:HH:mm:ss}  {level,-5}  {text}");
         if (_activity.Items.Count > 500) _activity.Items.RemoveAt(500);
         Log($"{level} {text}");
@@ -302,6 +303,7 @@ internal sealed class CollectorForm : Form
         {
             StatusTone.Reading => _pulseBright ? Color.FromArgb(66, 111, 151) : Color.FromArgb(30, 69, 110),
             StatusTone.Error => _pulseBright ? Color.FromArgb(195, 73, 73) : Color.Firebrick,
+            StatusTone.Paused => Color.Firebrick,
             StatusTone.Warning => _pulseBright ? Color.FromArgb(178, 128, 14) : Color.FromArgb(123, 86, 0),
             StatusTone.Success => Color.FromArgb(24, 111, 68),
             _ => Color.FromArgb(15, 20, 25)
@@ -323,6 +325,8 @@ internal sealed class CollectorForm : Form
             StatusTone.Reading => Color.FromArgb(222, 234, 246),
             StatusTone.Warning => Color.FromArgb(250, 240, 209),
             StatusTone.Error => Color.FromArgb(250, 226, 227),
+            StatusTone.Paused => Color.FromArgb(250, 226, 227),
+            StatusTone.Success => Color.FromArgb(224, 243, 231),
             _ => NeutralStatusBackground
         };
         if (target == _fadeTo) return; // Text pulsing must not restart the background transition.
@@ -506,30 +510,33 @@ internal sealed class CollectorForm : Form
     {
         if (_busy || _paused || _modal || _probe is null || _closing.IsCancellationRequested || DateTime.UtcNow < _scanHoldUntil) return;
         _busy = true;
+        using var scan = CancellationTokenSource.CreateLinkedTokenSource(_closing.Token);
+        _activeScan = scan;
         try
         {
-            var disks = await Task.Run(DriveProbe.Disks, _closing.Token);
-            if (_closing.IsCancellationRequested) return;
+            var disks = await Task.Run(DriveProbe.Disks, scan.Token).WaitAsync(scan.Token);
+            scan.Token.ThrowIfCancellationRequested();
             var numbers = disks.Select(d => d.Number).ToHashSet();
             foreach (var old in _connected.Where(n => !numbers.Contains(n)).ToList()) { _connected.Remove(old); _probe.Forget(old); Activity($"Disk {old} removed. Ready for another drive."); }
             var disk = disks.FirstOrDefault(d => !_connected.Contains(d.Number));
             if (disk is null) return;
             _connected.Add(disk.Number);
+            _identifying = true;
             Activity($"USB drive detected on Disk {disk.Number}. Reading drive identity...", tone: StatusTone.Reading);
             _guidance.Text = "Reading drive identity. Slow adapters may reach the 30-second timeout.";
-            await Task.Delay(2000, _closing.Token);
+            await Task.Delay(2000, scan.Token);
             DriveRecord record;
             try
             {
-                record = await _probe.IdentifyAsync(disk, _closing.Token);
-                if (_closing.IsCancellationRequested) return;
+                record = await _probe.IdentifyAsync(disk, scan.Token);
+                scan.Token.ThrowIfCancellationRequested();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Activity($"Disk {disk.Number} identity could not be read: {ex.Message}", "ERROR");
                 _guidance.Text = "Remove and reinsert to retry, or use Manual Drive Entry.";
                 PlayDriveNotification(DriveNotification.Error);
-                _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
+                _scanHoldUntil = DateTime.UtcNow.AddSeconds(4);
                 Log(ex.ToString());
                 return;
             }
@@ -537,20 +544,20 @@ internal sealed class CollectorForm : Form
             {
                 if (_book.HasSerial(record["SerialNumber"])) { Activity($"Disk {disk.Number} duplicate: {record["SerialNumber"]}. No row added.", "WARN"); _guidance.Text = "Remove and insert the next drive, or use Manual Drive Entry."; PlayDriveNotification(DriveNotification.Duplicate); }
                 else { var row = _book.Add(record); RefreshGrid(latestNumberAtTop: true); Activity($"USB drive recorded as row {row}: {record["Model"]} / {record["SerialNumber"]}", tone: StatusTone.Success); _guidance.Text = $"Saved as row {row}. Remove this drive and insert the next."; PlayDriveNotification(DriveNotification.Saved); }
-                _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
+                _scanHoldUntil = DateTime.UtcNow.AddSeconds(4);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 Activity($"Disk {disk.Number} was identified, but the workbook could not be updated ({ex.GetType().Name}): {ex.Message}", "ERROR");
                 _guidance.Text = "Check the workbook save location and file access before continuing.";
                 PlayDriveNotification(DriveNotification.Error);
-                _scanHoldUntil = DateTime.UtcNow.AddSeconds(3);
+                _scanHoldUntil = DateTime.UtcNow.AddSeconds(4);
                 Log(ex.ToString());
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); PlayDriveNotification(DriveNotification.Error); Log(ex.ToString()); }
-        finally { _busy = false; }
+        catch (Exception ex) { Activity("Scan error: " + ex.Message, "ERROR"); _scanHoldUntil = DateTime.UtcNow.AddSeconds(4); PlayDriveNotification(DriveNotification.Error); Log(ex.ToString()); }
+        finally { _identifying = false; _activeScan = null; _busy = false; }
     }
     private void RefreshGrid(bool preserveSort = true, bool latestNumberAtTop = false)
     {
@@ -709,9 +716,29 @@ internal sealed class CollectorForm : Form
     private async Task OpenTerminalAsync()
     {
         if (_terminalSession is not null) { _terminalSession.Stop(); return; }
-        if (_busy) { MessageBox.Show(this, "Wait for the current drive read to finish before opening Terminal.", "Terminal", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (_terminalStarting) return;
+        _terminalStarting = true;
         _modal = true;
         _timer.Stop();
+        _terminalToggle.Enabled = false;
+        try
+        {
+            // A routine disk check can be abandoned; an active identity read must finish
+            // so its record is saved before the Terminal takes over scanning.
+            if (_busy && !_identifying) _activeScan?.Cancel();
+            while (_busy) await Task.Delay(50, _closing.Token);
+            if (_closing.IsCancellationRequested) { _modal = false; return; }
+        }
+        catch (OperationCanceledException) when (_closing.IsCancellationRequested)
+        {
+            _modal = false;
+            return;
+        }
+        finally
+        {
+            _terminalStarting = false;
+            if (!IsDisposed) _terminalToggle.Enabled = true;
+        }
         using var io = new EmbeddedTerminalIO();
         _terminalIO = io;
         _terminalSession = TerminalCollector.ForEmbedded(io, _paused, paused =>
@@ -922,7 +949,7 @@ internal sealed class CollectorForm : Form
             var customUnitLabel = new Label { Text = "Custom Capacity Unit", Bounds = new Rectangle(20, 219, 195, 26) };
             var customUnit = Box(219, 219, 320);
             var typeLabel = new Label { Text = "5. Drive Type", Bounds = new Rectangle(20, 219, 195, 26) };
-            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
+            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
             var types = DriveTypes.Options;
             type.Items.AddRange(types.Cast<object>().ToArray());
             type.SelectedIndex = 0;
@@ -941,19 +968,29 @@ internal sealed class CollectorForm : Form
             unit.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             type.SelectedIndexChanged += (_, _) => UpdateManualLayout();
             var updatingTypeOptions = false;
+            var latestTypeQuery = "";
             type.TextUpdate += (_, _) =>
             {
                 if (updatingTypeOptions) return;
-                var query = type.Text; var caret = type.SelectionStart;
+                var query = type.Text;
+                latestTypeQuery = query;
                 type.DroppedDown = false;
                 updatingTypeOptions = true;
                 try
                 {
                     type.BeginUpdate(); type.Items.Clear(); type.Items.AddRange(DriveTypes.Matches(query).Cast<object>().ToArray()); type.EndUpdate();
-                    type.Text = query; type.SelectionStart = caret; SizeTypeDropdown();
+                    SizeTypeDropdown();
+                    type.DroppedDown = true;
+                    // Reopening the native ComboBox can select the matching text. Clear that
+                    // selection after opening so the next key extends the user's query.
+                    type.Text = query; type.SelectionStart = query.Length; type.SelectionLength = 0;
                 }
                 finally { updatingTypeOptions = false; }
-                type.DroppedDown = true;
+                type.BeginInvoke((Action)(() =>
+                {
+                    if (type.IsDisposed || !type.Focused || latestTypeQuery != query || type.SelectionLength == 0) return;
+                    type.Text = query; type.SelectionStart = query.Length; type.SelectionLength = 0;
+                }));
                 UpdateManualLayout();
             };
             dialog.Controls.AddRange([make, model, serial, amount, unit, customUnitLabel, customUnit, typeLabel, type, customTypeLabel, customType]);
