@@ -5,9 +5,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>4.2.9</Version>
+    <Version>4.3.0</Version>
     <AssemblyName>USB-Drive-Inventory-Collector-v$(Version)</AssemblyName>
-    <FileVersion>4.2.9.0</FileVersion>
+    <FileVersion>4.3.0.0</FileVersion>
     <Product>USB Drive Inventory Collector</Product>
     <Authors>Shannon Wetnight</Authors>
     <RepositoryUrl>https://github.com/ShannonWetnight/usb-drive-inventory-collector</RepositoryUrl>
@@ -16,5 +16,6 @@
   <ItemGroup>
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
     <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
   </ItemGroup>
 </Project>

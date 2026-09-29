@@ -266,7 +266,7 @@ internal sealed class TerminalCollector
 
     private void Details()
     {
-        _io.Clear(); _io.WriteLine($"VERSION INFORMATION\n===================\nUSB Drive Inventory Collector v{Application.ProductVersion}\nMaintainer: Shannon Wetnight\nWorkbook: {_book.Path}\nLog: {_logPath}\nsmartctl: {_smartVersion}\nColumns: {string.Join(", ", _book.Columns.Select(InventoryBook.Header))}\n");
+        _io.Clear(); _io.WriteLine($"VERSION INFORMATION\n===================\nUSB Drive Inventory Collector v{Application.ProductVersion.Split('+', 2)[0]}\nMaintainer: Shannon Wetnight\nWorkbook: {_book.Path}\nLog: {_logPath}\nsmartctl: {_smartVersion}\nColumns: {string.Join(", ", _book.Columns.Select(InventoryBook.Header))}\n");
         _io.Write("Press [Enter] to return."); _io.ReadLine();
     }
     private bool Confirm(string message) { _io.Write($"{message} [Y/N]: "); return _io.ReadLine()?.Trim().Equals("Y", StringComparison.OrdinalIgnoreCase) == true; }

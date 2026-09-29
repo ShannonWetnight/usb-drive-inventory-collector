@@ -21,7 +21,7 @@ jobs:
           [xml]$project = Get-Content 'WindowsApp/USBDriveInventoryCollector.csproj'
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$($project.Project.PropertyGroup.Version)"
       - name: Publish self-contained executable
-        run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
+        run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output publish
       - name: Verify generated workbook
         shell: pwsh
         run: |
