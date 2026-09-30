@@ -683,6 +683,9 @@ internal sealed class CollectorForm : Form
         var executableName = Path.GetFileName(Environment.ProcessPath ?? "USB-Drive-Inventory-Collector.exe");
         var info = new RichTextBox { Dock = DockStyle.Fill, Margin = Padding.Empty, BorderStyle = BorderStyle.Fixed3D, ReadOnly = true, TabStop = false, DetectUrls = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Both, Font = new Font("Consolas", 10), Lines = [
             $"Executable: {executableName}",
+            "License: MIT",
+            "Copyright (c) 2026 Shannon Wetnight",
+            "License details: https://github.com/ShannonWetnight/usb-drive-inventory-collector/blob/main/LICENSE",
             "Repository: https://github.com/ShannonWetnight/usb-drive-inventory-collector",
             $"Workbook: {_book.Path}", $"Debug log: {_logPath}", $"smartctl: {_version}",
             "Scope: USB physical drives with media; boot and system disks excluded",
