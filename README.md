@@ -122,4 +122,6 @@ The [Build Windows GUI](.github/workflows/build-native.yml) workflow builds pull
 
 ## License
 
-[The Unlicense](UNLICENSE). The software is provided without warranty.
+[MIT License](LICENSE). Copyright (c) 2026 Shannon Wetnight. Distributed copies must retain the copyright and license notice. The software is provided without warranty.
+
+The MIT license was adopted after v4.3.3. Code previously released under the Unlicense retains its public-domain dedication; this change does not revoke those permissions. MIT's notice requirement applies to new copyrightable contributions covered by the MIT license.

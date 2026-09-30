@@ -25,6 +25,7 @@ jobs:
       - name: Verify generated workbook
         shell: pwsh
         run: |
+          if (-not (Test-Path 'publish/LICENSE')) { throw 'Published license is missing.' }
           $path = Join-Path $env:RUNNER_TEMP 'Collector-Workbook-Check.xlsx'
           $exe = Join-Path (Resolve-Path publish) 'USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe'
           $result = Start-Process -FilePath $exe -ArgumentList @('--verify-workbook', $path) -Wait -PassThru
@@ -42,5 +43,7 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}-preview
-          path: publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
+          path: |
+            publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
+            publish/LICENSE
           if-no-files-found: error
