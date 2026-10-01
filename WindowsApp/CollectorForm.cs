@@ -65,7 +65,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
     private readonly Button _refreshWorkbook = new() { Image = CreateRefreshIcon(), ImageAlign = ContentAlignment.MiddleCenter, AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Visible = true };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
-    public CollectorForm()
+    public CollectorForm(bool initialize = true)
     {
         Text = "USB Drive Inventory Collector";
         KeyPreview = true;
@@ -256,7 +256,7 @@ internal sealed class CollectorForm : Form
             if (_busy || _modal) { _statusDisplay.Start(); return; }
             Activity(_paused ? "Scanning is paused." : _terminalSession is null ? "Waiting for a USB drive..." : "Terminal opened.");
         };
-        Shown += async (_, _) => await InitializeAsync();
+        if (initialize) Shown += async (_, _) => await InitializeAsync();
         FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _statusFade.Stop(); _statusDisplay.Stop(); _closing.Cancel(); CancelSounds(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
         HandleCreated += (_, _) => ApplyTheme();
         SystemEvents.UserPreferenceChanged += SystemThemeChanged;
@@ -323,8 +323,9 @@ internal sealed class CollectorForm : Form
     }
     internal static void VerifyThemes(string directory)
     {
-        using var form = new CollectorForm();
-        _ = form.Handle;
+        using var form = new CollectorForm(initialize: false) { ShowInTaskbar = false };
+        form.Show();
+        Application.DoEvents();
         form._book.Records.Add(new DriveRecord { ["Manufacturer"] = "Example", ["Model"] = "THEME-CHECK", ["SerialNumber"] = "THEME-SERIAL" });
         form.RefreshGrid();
         var savedPreference = CollectorSettings.Theme();
@@ -332,6 +333,7 @@ internal sealed class CollectorForm : Form
         {
             form._themePreference = preference; form.ApplyTheme();
             form.PerformLayout();
+            Application.DoEvents();
             if (form._theme.Size != form._sound.Size || form._theme.Left - form._sound.Right != 8 ||
                 form._grid.DefaultCellStyle.BackColor != CollectorTheme.Field(form._dark) ||
                 form._grid.Rows[0].Cells["SerialNumber"].Value?.ToString() != "THEME-SERIAL")
