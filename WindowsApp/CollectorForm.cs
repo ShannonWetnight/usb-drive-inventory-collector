@@ -691,7 +691,19 @@ internal sealed class CollectorForm : Form
             "Scope: USB physical drives with media; boot and system disks excluded",
             "Transport: smartctl autodetection plus USB adapter fallbacks",
             "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process",
-            "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header))] };
+            "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header)),
+            "", "Third-party credits",
+            "Open XML SDK 3.3.0 — .NET Foundation and Contributors (MIT)",
+            "https://github.com/dotnet/Open-XML-SDK",
+            ".NET 8 / Windows Forms — .NET Foundation and Contributors (MIT)",
+            "Includes System.Management, System.Text.Encoding.CodePages, System.IO.Packaging, and System.CodeDom",
+            "https://github.com/dotnet/runtime",
+            "https://github.com/dotnet/winforms",
+            "smartmontools / smartctl — smartmontools developers (GPL-2.0-or-later)",
+            "https://www.smartmontools.org/",
+            "smartctl is installed separately and is called as an external program.",
+            "Full bundled dependency notices: THIRD-PARTY-NOTICES.txt beside the executable",
+            "https://github.com/ShannonWetnight/usb-drive-inventory-collector/blob/main/THIRD-PARTY-NOTICES.txt"] };
         var disclaimer = new Label { Text = "AI Workflow Notice: This project was written through AI prompting and reviewed by its maintainer. Check collected data against the drive label when accuracy matters.", Dock = DockStyle.Fill, Margin = Padding.Empty, ForeColor = Color.DimGray, Font = new Font("Segoe UI", 9), Padding = new Padding(2, 7, 0, 0) };
         void OpenLink(string? url)
         {
@@ -885,6 +897,7 @@ internal sealed class CollectorForm : Form
     {
         if (_terminalSession is not null) { MessageBox.Show(this, "Disable Terminal before editing a recorded drive.", "Edit Recorded Drive"); return; }
         if (_busy) { MessageBox.Show(this, "Wait for the current drive read to finish before editing a record.", "Edit Recorded Drive"); return; }
+        if (_modal || index < 0 || index >= _book.Records.Count) return;
         _modal = true;
         try
         {
@@ -908,7 +921,25 @@ internal sealed class CollectorForm : Form
             var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 55, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(12, 7, 15, 0) };
             var cancel = new Button { Text = "Cancel", Width = 95, Height = 34 };
             var save = new Button { Text = "Save Changes", Width = 140, Height = 34 };
+            var remove = new Button { Text = "Remove Entry", Width = 140, Height = 34 };
+            dialog.CancelButton = cancel;
             cancel.Click += (_, _) => dialog.Close();
+            remove.Click += (_, _) =>
+            {
+                var saved = _book.Records[index];
+                if (MessageBox.Show(dialog,
+                    $"Remove the saved entry in workbook row {index + 2}?\n\nModel: {saved["Model"]}\nSerial: {saved["SerialNumber"]}\n\nThis removes the row from the workbook. Unsaved edits in this dialog will be discarded.",
+                    "Confirm Remove Entry", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                try
+                {
+                    _book.Remove(index);
+                    RefreshGrid();
+                    Activity($"Row {index + 2} removed: {saved["Model"]} / {saved["SerialNumber"]}", tone: StatusTone.Success);
+                    dialog.Close();
+                }
+                catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, "Entry was not removed: " + ex.Message, "Remove Entry", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            };
             save.Click += (_, _) =>
             {
                 try
@@ -928,7 +959,7 @@ internal sealed class CollectorForm : Form
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, ex.Message, "Edit Recorded Drive", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             };
-            actions.Controls.AddRange([cancel, save]);
+            actions.Controls.AddRange([cancel, save, remove]);
             dialog.Controls.Add(fields); dialog.Controls.Add(actions); dialog.Controls.Add(intro);
             dialog.ShowDialog(this);
         }
@@ -1081,7 +1112,7 @@ internal sealed class CollectorForm : Form
     private string Review(DriveRecord record, bool duplicate)
     {
         using var dialog = new Form { Text = duplicate ? "Duplicate Serial Number" : "Review Manual Drive", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, ClientSize = new Size(490, 345), MaximizeBox = false, MinimizeBox = false };
-        var summary = new TextBox { Bounds = new Rectangle(20, 20, 450, 158), Multiline = true, ReadOnly = true, TabStop = false, Font = new Font("Consolas", 11), Lines = [$"Manufacturer: {record["Manufacturer"]}", $"Model:        {record["Model"]}", $"Serial:       {record["SerialNumber"]}", $"Capacity:     {record["Capacity"]}", $"Type:         {record["Type"]}"] };
+        var summary = new RichTextBox { Bounds = new Rectangle(20, 20, 450, 158), BorderStyle = BorderStyle.Fixed3D, BackColor = SystemColors.Window, ReadOnly = true, TabStop = false, DetectUrls = false, ScrollBars = RichTextBoxScrollBars.Vertical, Font = new Font("Consolas", 11), Lines = [$"Manufacturer: {record["Manufacturer"]}", $"Model:        {record["Model"]}", $"Serial:       {record["SerialNumber"]}", $"Capacity:     {record["Capacity"]}", $"Type:         {record["Type"]}"] };
         var note = new Label { Text = duplicate ? "This serial is already in the workbook. Change it or cancel this record." : record["SerialNumber"] == "N/A" ? "Serial N/A cannot be checked for duplicates." : "Review these values before saving a new row.", Bounds = new Rectangle(20, 188, 450, 48) };
         dialog.Controls.AddRange([summary, note]); string action = "Cancel";
         dialog.Shown += (_, _) => summary.Select(0, 0);

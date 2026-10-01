@@ -47,6 +47,7 @@ internal static class Program
                     var migrated = XDocument.Load(stream);
                     if (!migrated.Descendants().Any(t => t.Name.LocalName == "t" && t.Value == "Manufacturer") || migrated.Descendants().Any(t => t.Name.LocalName == "t" && t.Value == "Make")) throw new InvalidDataException("Legacy header migration failed.");
                 }
+                VerifyEntryRemoval();
             }
             catch (Exception ex) { File.WriteAllText(args[1] + ".error.txt", ex.ToString()); Environment.ExitCode = 1; }
             return;
@@ -79,6 +80,127 @@ internal static class Program
             else MessageBox.Show($"The collector could not start. {ex.Message}\n\nDetails: {path}", "USB Drive Inventory Collector", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetErrorMode(oldMode); }
+    }
+    private static void VerifyEntryRemoval()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Collector-Removal-Check-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "Inventory.xlsx");
+            var book = new InventoryBook(path);
+            book.OpenOrCreate();
+            book.ChangeColumns([..InventoryBook.Core, "FirmwareVersion"]);
+            foreach (var serial in new[] { "FIRST", "MIDDLE", "LAST" })
+                book.Add(new DriveRecord { ["Manufacturer"] = "Example", ["Model"] = serial + "-MODEL", ["SerialNumber"] = serial, ["FirmwareVersion"] = serial + "-FW" });
+
+            void Check(params string[] serials)
+            {
+                var reopened = new InventoryBook(path);
+                reopened.OpenOrCreate();
+                if (!book.Records.Select(r => r["SerialNumber"]).SequenceEqual(serials) ||
+                    !reopened.Records.Select(r => r["SerialNumber"]).SequenceEqual(serials) ||
+                    !reopened.Columns.SequenceEqual(book.Columns) ||
+                    reopened.Records.Any(r => r["FirmwareVersion"] != r["SerialNumber"] + "-FW"))
+                    throw new InvalidDataException("Removal changed record order, values, or columns.");
+                using var archive = ZipFile.OpenRead(path);
+                using var stream = archive.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+                var xml = XDocument.Load(stream);
+                var rows = xml.Descendants().Where(e => e.Name.LocalName == "row").ToArray();
+                if (!rows.Select(r => (string?)r.Attribute("r")).SequenceEqual(Enumerable.Range(1, serials.Length + 1).Select(i => i.ToString())))
+                    throw new InvalidDataException("Removal did not renumber workbook rows.");
+                var filter = xml.Descendants().FirstOrDefault(e => e.Name.LocalName == "autoFilter");
+                if (serials.Length == 0 ? filter is not null : (string?)filter?.Attribute("ref") != $"A1:F{serials.Length + 1}")
+                    throw new InvalidDataException("Removal did not update the workbook filter.");
+            }
+
+            foreach (var index in new[] { -1, book.Records.Count })
+            {
+                var rejected = false;
+                try { book.Remove(index); }
+                catch (ArgumentOutOfRangeException) { rejected = true; }
+                if (!rejected) throw new InvalidDataException("Invalid removal index was accepted.");
+            }
+            Check("FIRST", "MIDDLE", "LAST");
+            var previous = book.Records.ToArray();
+            var originalBytes = File.ReadAllBytes(path);
+            using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var failed = false;
+                try { book.Remove(1); }
+                catch (IOException) { failed = true; }
+                if (!failed || !book.Records.SequenceEqual(previous)) throw new InvalidDataException("Failed removal did not restore the entry.");
+            }
+            if (!File.ReadAllBytes(path).SequenceEqual(originalBytes)) throw new InvalidDataException("Failed removal changed the workbook.");
+            Check("FIRST", "MIDDLE", "LAST");
+            book.Remove(1);
+            Check("FIRST", "LAST");
+            if (book.HasSerial("MIDDLE")) throw new InvalidDataException("Removed serial is still considered a duplicate.");
+            book.Add(previous[1]);
+            Check("FIRST", "LAST", "MIDDLE");
+            book.Remove(2);
+            Check("FIRST", "LAST");
+            book.Remove(0);
+            Check("LAST");
+            book.Remove(0);
+            Check();
+            book.Add(previous[0]);
+            Check("FIRST");
+            VerifyTerminalRemoval(directory, previous);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+    private static void VerifyTerminalRemoval(string directory, DriveRecord[] samples)
+    {
+        var book = new InventoryBook(Path.Combine(directory, "Terminal.xlsx"));
+        book.OpenOrCreate();
+        book.Add(samples[0]); book.Add(samples[2]);
+        var logPath = Path.Combine(directory, "Terminal.log");
+        string Exercise(params string?[] responses)
+        {
+            var io = new VerificationTerminalIO(responses);
+            new TerminalCollector(io, true, book, logPath).RemoveEntry();
+            return io.Output.ToString();
+        }
+        void Check(int removalCount, params string[] serials)
+        {
+            var reopened = new InventoryBook(book.Path); reopened.OpenOrCreate();
+            var log = File.Exists(logPath) ? File.ReadAllText(logPath) : "";
+            if (!book.Records.Select(r => r["SerialNumber"]).SequenceEqual(serials) ||
+                !reopened.Records.Select(r => r["SerialNumber"]).SequenceEqual(serials) ||
+                System.Text.RegularExpressions.Regex.Matches(log, @"Row \d+ removed:").Count != removalCount)
+                throw new InvalidDataException("Terminal removal changed the wrong entry or logged an unsuccessful removal.");
+        }
+        Exercise(""); Exercise(":cancel"); Exercise();
+        Exercise("1", "N"); Exercise("1", ""); Exercise("1", null);
+        Check(0, "FIRST", "LAST");
+        var output = Exercise("0", "3", "invalid", "2", "y");
+        Check(1, "FIRST");
+        if (!output.Contains("Model: LAST-MODEL") || !output.Contains("Serial: LAST") ||
+            !File.ReadAllText(logPath).Contains("Row 3 removed: LAST-MODEL / LAST"))
+            throw new InvalidDataException("Terminal removal confirmation or log omitted the saved identity.");
+        var originalBytes = File.ReadAllBytes(book.Path);
+        using (var locked = new FileStream(book.Path, FileMode.Open, FileAccess.Read, FileShare.None))
+            output = Exercise("1", "Y");
+        Check(1, "FIRST");
+        if (!output.Contains("Entry was not removed:") || !File.ReadAllBytes(book.Path).SequenceEqual(originalBytes))
+            throw new InvalidDataException("Terminal did not report or preserve a failed removal.");
+        Exercise("1", "Y");
+        Check(2);
+        output = Exercise();
+        if (!output.Contains("There are no saved entries to remove.")) throw new InvalidDataException("Empty Terminal inventory was not handled.");
+        Check(2);
+    }
+    private sealed class VerificationTerminalIO(IEnumerable<string?> responses) : ITerminalIO
+    {
+        private readonly Queue<string?> _responses = new(responses);
+        public StringBuilder Output { get; } = new();
+        public bool KeyAvailable => false;
+        public char ReadKey() => throw new InvalidOperationException("Key input is not used by removal verification.");
+        public string? ReadLine() => _responses.Count > 0 ? _responses.Dequeue() : null;
+        public void Write(string value) => Output.Append(value);
+        public void WriteLine(string value) => Output.AppendLine(value);
+        public void Clear() { }
     }
 }
 

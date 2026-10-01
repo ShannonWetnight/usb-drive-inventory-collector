@@ -26,6 +26,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path 'publish/LICENSE')) { throw 'Published license is missing.' }
+          if (-not (Test-Path 'publish/THIRD-PARTY-NOTICES.txt')) { throw 'Published dependency notices are missing.' }
           $path = Join-Path $env:RUNNER_TEMP 'Collector-Workbook-Check.xlsx'
           $exe = Join-Path (Resolve-Path publish) 'USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe'
           $result = Start-Process -FilePath $exe -ArgumentList @('--verify-workbook', $path) -Wait -PassThru
@@ -46,4 +47,5 @@ jobs:
           path: |
             publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
             publish/LICENSE
+            publish/THIRD-PARTY-NOTICES.txt
           if-no-files-found: error

@@ -129,6 +129,14 @@ internal sealed class InventoryBook
         try { Save(); }
         catch { Records[index] = previous; throw; }
     }
+    public void Remove(int index)
+    {
+        if (index < 0 || index >= Records.Count) throw new ArgumentOutOfRangeException(nameof(index));
+        var previous = Records[index];
+        Records.RemoveAt(index);
+        try { Save(); }
+        catch { Records.Insert(index, previous); throw; }
+    }
     public InventoryBook AtLocation(string destination)
     {
         destination = System.IO.Path.GetFullPath(destination);
