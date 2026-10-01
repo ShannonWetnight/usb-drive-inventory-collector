@@ -58,7 +58,7 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab when selected and remains visible while Terminal is running. |
 | **Version Information** | Opens the app version, license, technical details, and attributions with project links from the banner. |
 | Sound icon | Turns drive notification sounds on or off. The choice is saved for this Windows account. |
-| Theme icon beside Sound | Selects **System**, **Light**, or **Dark**. System is the default and follows the Windows app theme. The choice is saved for this Windows account. |
+| Theme icon beside Sound | Switches directly between **Light** and **Dark**. The app follows the Windows app theme by default until you toggle it; your chosen mode is saved for this Windows account. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
 | **Reset View** | Appears when the Recorded Drives view changes. Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
@@ -70,7 +70,7 @@ Drive types can be searched in the manual-entry list. Choose **Other** to enter 
 
 To remove a record, double-click it in **Recorded Drives**, select **Remove Entry**, and confirm the model and serial number. The confirmation defaults to **No**. Removal discards any unsaved edits in the dialog, updates the workbook immediately, and renumbers the remaining records. If saving fails, the entry stays in the app. Disable Terminal and wait for any current drive read to finish before editing or removing entries.
 
-The theme applies to the main window and the collector's custom dialogs. Selecting **System** follows Windows theme changes while the app is open. Native Windows prompts and file pickers use Windows styling; the embedded Terminal keeps its console colors.
+The theme applies to the main window and the collector's custom dialogs. The default **System** preference follows Windows theme changes while the app is open. Clicking the theme icon switches to the opposite mode and saves that choice. Native Windows prompts and file pickers use Windows styling; the embedded Terminal keeps its console colors.
 
 ### Terminal Interface
 
