@@ -162,11 +162,6 @@ internal sealed class CollectorForm : Form
             var selected = e.Index == _tabs.SelectedIndex;
             using var brush = new SolidBrush(selected ? CollectorTheme.Field(_dark) : CollectorTheme.Surface(_dark));
             e.Graphics.FillRectangle(brush, e.Bounds);
-            if (e.Index == _tabs.TabCount - 1)
-            {
-                using var strip = new SolidBrush(CollectorTheme.Surface(_dark));
-                e.Graphics.FillRectangle(strip, e.Bounds.Right, e.Bounds.Top, Math.Max(0, _tabs.ClientSize.Width - e.Bounds.Right), e.Bounds.Height);
-            }
             TextRenderer.DrawText(e.Graphics, _tabs.TabPages[e.Index].Text, _tabs.Font, e.Bounds, CollectorTheme.Text(_dark), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if ((e.State & DrawItemState.Focus) != 0) ControlPaint.DrawFocusRectangle(e.Graphics, e.Bounds, CollectorTheme.Text(_dark), brush.Color);
         };
