@@ -42,7 +42,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _openPath = new() { Text = "Open Folder", Size = new Size(110, 28) };
     private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, SelectionMode = DataGridViewSelectionMode.FullRowSelect, EnableHeadersVisualStyles = false, ColumnHeadersHeight = 34 };
     private readonly ListBox _activity = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, Font = new Font("Consolas", 9) };
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(130, 36) };
+    private readonly CollectorTabControl _tabs = new() { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(130, 36) };
     private readonly RichTextBox _terminalOutput = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BackColor = Color.FromArgb(18, 22, 28), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
     private readonly TextBox _terminalInput = new() { Font = new Font("Consolas", 10), Text = "Terminal disabled", BorderStyle = BorderStyle.None, Enabled = false };
     private readonly Panel _terminalInputFrame = new() { BorderStyle = BorderStyle.FixedSingle, BackColor = SystemColors.Control };
@@ -180,6 +180,7 @@ internal sealed class CollectorForm : Form
         // Keep an opaque strip present even when its buttons are hidden. Native
         // TabControl painting otherwise leaves pale rectangles behind the overlays.
         _tabActions.Controls.AddRange([_terminalToggle, _resetView, _refreshWorkbook]);
+        _tabs.HeaderActions = _tabActions;
         tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_tabActions);
         _tabActions.BringToFront();
         void PositionTerminalToggle()
