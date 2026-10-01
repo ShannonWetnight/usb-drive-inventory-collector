@@ -49,7 +49,7 @@ internal sealed class ThemedComboBox : ComboBox
         var x = bounds.Left + bounds.Width / 2;
         var y = bounds.Top + bounds.Height / 2;
         var halfWidth = Math.Max(3, DeviceDpi / 32);
-        graphics.FillPolygon(brush, [new Point(x - halfWidth, y - 1), new Point(x + halfWidth, y - 1), new Point(x, y + halfWidth - 1)]);
+        graphics.FillPolygon(brush, new Point[] { new Point(x - halfWidth, y - 1), new Point(x + halfWidth, y - 1), new Point(x, y + halfWidth - 1) });
     }
 
     [StructLayout(LayoutKind.Sequential)]
