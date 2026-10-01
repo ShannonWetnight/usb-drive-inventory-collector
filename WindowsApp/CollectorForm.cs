@@ -360,9 +360,9 @@ internal sealed class CollectorForm : Form
             if (form._pause.PointToScreen(Point.Empty).X != statusLeft ||
                 form._tabs.Parent!.PointToScreen(Point.Empty).X != statusLeft ||
                 form._tabs.Parent.Width != form._statusPanel.Width ||
-                form._manual.Left - form._pause.Right != 8 || form._finish.Left - form._manual.Right != 8 ||
+                form._manual.Left - form._pause.Right != form._pause.Margin.Right || form._finish.Left - form._manual.Right != form._manual.Margin.Right ||
                 form._theme.Parent!.Parent!.Margin != Padding.Empty)
-                throw new InvalidDataException("Action buttons, workbook, or banner have inconsistent margins.");
+                throw new InvalidDataException($"Inconsistent margins: pause={form._pause.PointToScreen(Point.Empty).X}, status={statusLeft}, tabs={form._tabs.Parent.PointToScreen(Point.Empty).X}, widths={form._tabs.Parent.Width}/{form._statusPanel.Width}, gaps={form._manual.Left - form._pause.Right}/{form._finish.Left - form._manual.Right}, margins={form._pause.Margin.Right}/{form._manual.Margin.Right}, header={form._theme.Parent.Parent.Margin}.");
             SavePreview(form, directory, preference.ToString());
             form._viewChanged = true; form.UpdateResetViewButton();
             form._tabs.SelectedIndex = 1;

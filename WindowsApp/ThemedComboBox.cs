@@ -11,6 +11,13 @@ internal sealed class ThemedComboBox : ComboBox
     {
         FlatStyle = FlatStyle.Flat;
         DrawMode = DrawMode.OwnerDrawFixed;
+        ItemHeight = Font.Height + 2;
+    }
+
+    protected override void OnFontChanged(EventArgs e)
+    {
+        base.OnFontChanged(e);
+        ItemHeight = Font.Height + 2;
     }
 
     protected override void OnDrawItem(DrawItemEventArgs e)
