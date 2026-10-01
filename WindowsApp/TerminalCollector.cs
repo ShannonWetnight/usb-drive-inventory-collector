@@ -8,17 +8,22 @@ internal sealed class TerminalCollector
 {
     private readonly ITerminalIO _io;
     private readonly bool _embedded;
-    private InventoryBook _book = new(CollectorSettings.WorkbookPath());
+    private InventoryBook _book;
     private readonly AutoPlayGuard _autoPlay = new();
     private readonly HashSet<int> _connected = [];
-    private readonly string _logPath = Path.Combine(CollectorSettings.LogsDirectory(), $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    private readonly string _logPath;
     private DriveProbe? _probe;
     private string _smartVersion = "N/A";
     private volatile bool _paused;
     private Action<bool>? _pauseChanged;
     private volatile bool _stop;
 
-    private TerminalCollector(ITerminalIO io, bool embedded) { _io = io; _embedded = embedded; }
+    internal TerminalCollector(ITerminalIO io, bool embedded, InventoryBook? book = null, string? logPath = null)
+    {
+        _io = io; _embedded = embedded;
+        _book = book ?? new InventoryBook(CollectorSettings.WorkbookPath());
+        _logPath = logPath ?? Path.Combine(CollectorSettings.LogsDirectory(), $"USB-Drive-Inventory-Collector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    }
     public static void Run() => new TerminalCollector(new ConsoleTerminalIO(), false).Start();
     public static TerminalCollector ForEmbedded(EmbeddedTerminalIO io, bool paused, Action<bool> pauseChanged)
     {
@@ -82,6 +87,7 @@ internal sealed class TerminalCollector
                 if (key == 'M') ManualEntry(false);
                 else if (key == 'L') ManualEntry(true);
                 else if (key == 'S') Setup();
+                else if (key == 'R') RemoveEntry();
                 else if (key == 'D') Details();
                 else if (key == 'P') { _paused = !_paused; _pauseChanged?.Invoke(_paused); Write(_paused ? "Scanning paused. Press [P] to resume." : "Scanning resumed."); }
                 else if (key == 'H') Help();
@@ -114,6 +120,36 @@ internal sealed class TerminalCollector
     }
 
     private void OnCancel(object? sender, ConsoleCancelEventArgs args) { args.Cancel = true; _stop = true; }
+
+    internal void RemoveEntry()
+    {
+        if (_book.Records.Count == 0) { Write("There are no saved entries to remove."); return; }
+        _io.Clear(); _io.WriteLine("REMOVE RECORDED ENTRY\n=====================");
+        _io.WriteLine("Record number  Model / Serial Number");
+        for (var i = 0; i < _book.Records.Count; i++)
+            _io.WriteLine($"{i + 1,13}  {_book.Records[i]["Model"]} / {_book.Records[i]["SerialNumber"]}");
+        while (!_stop)
+        {
+            _io.Write("Choose a record number ([Enter] or :cancel to return): ");
+            var input = _io.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(input) || input.Equals(":cancel", StringComparison.OrdinalIgnoreCase)) return;
+            if (!int.TryParse(input, out var number) || number < 1 || number > _book.Records.Count)
+            { _io.WriteLine("Choose a listed record number."); continue; }
+            var index = number - 1;
+            var saved = _book.Records[index];
+            var confirmed = !_stop && Confirm($"Remove saved entry #{number} (workbook row {index + 2})?\nModel: {saved["Model"]}\nSerial: {saved["SerialNumber"]}\nThis removes the row from the workbook. Enter Y to confirm; any other response cancels.");
+            if (!confirmed || _stop)
+            { Write("Removal cancelled. No entry was removed."); return; }
+            try
+            {
+                _book.Remove(index);
+                Write($"Row {index + 2} removed: {saved["Model"]} / {saved["SerialNumber"]}");
+                _io.WriteLine($"Records remaining: {_book.Records.Count}. Record numbers have been updated.");
+            }
+            catch (Exception ex) { Write("Entry was not removed: " + ex.Message); Log(ex.ToString()); }
+            return;
+        }
+    }
 
     private void ManualEntry(bool copyLast)
     {
@@ -273,7 +309,7 @@ internal sealed class TerminalCollector
     private void Print(DriveRecord record)
     { foreach (var key in InventoryBook.Core) _io.WriteLine($"{InventoryBook.Header(key),-20} {record[key]}"); }
     private void Recorded(DriveRecord record, int row) { Write($"Drive recorded as row {row}."); Print(record); }
-    private void Help() => _io.WriteLine("Usage: [M] Manual Drive Entry  [L] Copy Last Drive  [S] Workbook Setup  [P] Pause Scanning  [D] Version Information  [H] Help  [Q] Finish");
+    private void Help() => _io.WriteLine("Usage: [M] Manual Drive Entry  [L] Copy Last Drive  [S] Workbook Setup  [R] Remove Entry  [P] Pause Scanning  [D] Version Information  [H] Help  [Q] Finish");
     private void Write(string text) { _io.WriteLine(text); Log(text); }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
 

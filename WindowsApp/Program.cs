@@ -146,8 +146,61 @@ internal static class Program
             Check();
             book.Add(previous[0]);
             Check("FIRST");
+            VerifyTerminalRemoval(directory, previous);
         }
         finally { Directory.Delete(directory, true); }
+    }
+    private static void VerifyTerminalRemoval(string directory, DriveRecord[] samples)
+    {
+        var book = new InventoryBook(Path.Combine(directory, "Terminal.xlsx"));
+        book.OpenOrCreate();
+        book.Add(samples[0]); book.Add(samples[2]);
+        var logPath = Path.Combine(directory, "Terminal.log");
+        string Exercise(params string?[] responses)
+        {
+            var io = new VerificationTerminalIO(responses);
+            new TerminalCollector(io, true, book, logPath).RemoveEntry();
+            return io.Output.ToString();
+        }
+        void Check(int removalCount, params string[] serials)
+        {
+            var reopened = new InventoryBook(book.Path); reopened.OpenOrCreate();
+            var log = File.Exists(logPath) ? File.ReadAllText(logPath) : "";
+            if (!book.Records.Select(r => r["SerialNumber"]).SequenceEqual(serials) ||
+                !reopened.Records.Select(r => r["SerialNumber"]).SequenceEqual(serials) ||
+                System.Text.RegularExpressions.Regex.Matches(log, @"Row \d+ removed:").Count != removalCount)
+                throw new InvalidDataException("Terminal removal changed the wrong entry or logged an unsuccessful removal.");
+        }
+        Exercise(""); Exercise(":cancel"); Exercise();
+        Exercise("1", "N"); Exercise("1", ""); Exercise("1", null);
+        Check(0, "FIRST", "LAST");
+        var output = Exercise("0", "3", "invalid", "2", "y");
+        Check(1, "FIRST");
+        if (!output.Contains("Model: LAST-MODEL") || !output.Contains("Serial: LAST") ||
+            !File.ReadAllText(logPath).Contains("Row 3 removed: LAST-MODEL / LAST"))
+            throw new InvalidDataException("Terminal removal confirmation or log omitted the saved identity.");
+        var originalBytes = File.ReadAllBytes(book.Path);
+        using (var locked = new FileStream(book.Path, FileMode.Open, FileAccess.Read, FileShare.None))
+            output = Exercise("1", "Y");
+        Check(1, "FIRST");
+        if (!output.Contains("Entry was not removed:") || !File.ReadAllBytes(book.Path).SequenceEqual(originalBytes))
+            throw new InvalidDataException("Terminal did not report or preserve a failed removal.");
+        Exercise("1", "Y");
+        Check(2);
+        output = Exercise();
+        if (!output.Contains("There are no saved entries to remove.")) throw new InvalidDataException("Empty Terminal inventory was not handled.");
+        Check(2);
+    }
+    private sealed class VerificationTerminalIO(IEnumerable<string?> responses) : ITerminalIO
+    {
+        private readonly Queue<string?> _responses = new(responses);
+        public StringBuilder Output { get; } = new();
+        public bool KeyAvailable => false;
+        public char ReadKey() => throw new InvalidOperationException("Key input is not used by removal verification.");
+        public string? ReadLine() => _responses.Count > 0 ? _responses.Dequeue() : null;
+        public void Write(string value) => Output.Append(value);
+        public void WriteLine(string value) => Output.AppendLine(value);
+        public void Clear() { }
     }
 }
 

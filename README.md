@@ -86,11 +86,14 @@ The same executable can also open a separate console window when started with `-
 | `[M]` | Start Manual Drive Entry. |
 | `[L]` | Copy the last saved drive and enter a new serial number. |
 | `[S]` | Open Workbook Setup. |
+| `[R]` | List recorded entries and remove one after confirmation. |
 | `[P]` | Pause or resume scanning. |
 | `[D]` | Show Version Information. |
 | `[H]` | Show the usage summary. |
 | `[Q]` | Finish and close the collector. |
 | `[Enter]` | Submit the current answer. |
+
+To remove a record in Terminal, press **[R]**, choose its displayed record number, and check the model and serial number in the confirmation. Enter **Y** to remove it; any other response cancels. At the record-selection prompt, press Enter or type `:cancel` to return. Successful removal is saved and logged with the workbook row, model, and serial number. This command works in both embedded Terminal and the separate `--terminal` window. Recorded Drives reloads when embedded Terminal closes.
 
 ### Settings and Values
 
