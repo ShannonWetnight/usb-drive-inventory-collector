@@ -26,7 +26,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path 'publish/LICENSE')) { throw 'Published license is missing.' }
-          if (-not (Test-Path 'publish/THIRD-PARTY-NOTICES.txt')) { throw 'Published dependency notices are missing.' }
+          if ((Get-Content 'publish/LICENSE' -Raw) -notmatch '(?m)^Attributions:\r?$') { throw 'Published LICENSE is missing attributions.' }
           $path = Join-Path $env:RUNNER_TEMP 'Collector-Workbook-Check.xlsx'
           $exe = Join-Path (Resolve-Path publish) 'USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe'
           $result = Start-Process -FilePath $exe -ArgumentList @('--verify-workbook', $path) -Wait -PassThru
@@ -38,6 +38,11 @@ jobs:
           python -c "from openpyxl import load_workbook; import sys; w=load_workbook(sys.argv[1]); assert w.active['C2'].value == 'TEST-SERIAL'" $path
       - uses: actions/upload-artifact@v6
         with:
+          name: Theme-Previews-v${{ steps.app-version.outputs.version }}
+          path: ${{ runner.temp }}/Collector-Theme-*.png
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        with:
           name: Workbook-Compatibility-Sample-v${{ steps.app-version.outputs.version }}
           path: ${{ runner.temp }}/Collector-Workbook-Check.xlsx
           if-no-files-found: error
@@ -47,5 +52,4 @@ jobs:
           path: |
             publish/USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe
             publish/LICENSE
-            publish/THIRD-PARTY-NOTICES.txt
           if-no-files-found: error

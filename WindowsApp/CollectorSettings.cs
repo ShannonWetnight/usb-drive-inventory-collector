@@ -15,6 +15,11 @@ internal static class CollectorSettings
         try { return Load().SoundsEnabled ?? true; }
         catch { return true; }
     }
+    public static ThemePreference Theme()
+    {
+        try { var value = Load().Theme ?? ThemePreference.System; return Enum.IsDefined(value) ? value : ThemePreference.System; }
+        catch { return ThemePreference.System; }
+    }
 
     public static string WorkbookPath()
     {
@@ -36,10 +41,13 @@ internal static class CollectorSettings
     }
 
     public static void SavePaths(string workbookPath, string logsDirectory)
-        => Save(new SettingsData { WorkbookPath = Path.GetFullPath(workbookPath), LogsDirectory = Path.GetFullPath(logsDirectory), SoundsEnabled = SoundsEnabled() });
+        => Save(new SettingsData { WorkbookPath = Path.GetFullPath(workbookPath), LogsDirectory = Path.GetFullPath(logsDirectory), SoundsEnabled = SoundsEnabled(), Theme = Theme() });
 
     public static void SaveSoundsEnabled(bool enabled)
-        => Save(new SettingsData { WorkbookPath = WorkbookPath(), LogsDirectory = LogsDirectory(), SoundsEnabled = enabled });
+        => Save(new SettingsData { WorkbookPath = WorkbookPath(), LogsDirectory = LogsDirectory(), SoundsEnabled = enabled, Theme = Theme() });
+
+    public static void SaveTheme(ThemePreference theme)
+        => Save(new SettingsData { WorkbookPath = WorkbookPath(), LogsDirectory = LogsDirectory(), SoundsEnabled = SoundsEnabled(), Theme = theme });
 
     private static void Save(SettingsData settings)
     {
@@ -56,5 +64,6 @@ internal static class CollectorSettings
         public string? WorkbookPath { get; set; }
         public string? LogsDirectory { get; set; }
         public bool? SoundsEnabled { get; set; }
+        public ThemePreference? Theme { get; set; }
     }
 }

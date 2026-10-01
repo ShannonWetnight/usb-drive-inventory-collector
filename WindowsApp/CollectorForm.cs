@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace USBDriveInventoryCollector;
 
@@ -56,11 +57,15 @@ internal sealed class CollectorForm : Form
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
     private readonly Button _sound = new() { Width = 36, Height = 34, Image = CreateSoundIcon(true), ImageAlign = ContentAlignment.MiddleCenter, Padding = Padding.Empty, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
+    private readonly Button _theme = new() { Width = 36, Height = 34, ImageAlign = ContentAlignment.MiddleCenter, Padding = Padding.Empty, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), AccessibleName = "Choose Theme" };
+    private readonly ContextMenuStrip _themeMenu = new();
+    private ThemePreference _themePreference = CollectorSettings.Theme();
+    private bool _dark;
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
     private readonly Button _resetView = new() { Text = "Reset View", Width = 110, Height = 28, Visible = false };
     private readonly Button _refreshWorkbook = new() { Image = CreateRefreshIcon(), ImageAlign = ContentAlignment.MiddleCenter, AccessibleName = "Refresh Workbook", Width = 34, Height = 28, Visible = true };
     private readonly Button _finish = new() { Text = "Finish", Width = 90 };
-    public CollectorForm()
+    public CollectorForm(bool initialize = true)
     {
         Text = "USB Drive Inventory Collector";
         KeyPreview = true;
@@ -74,19 +79,20 @@ internal sealed class CollectorForm : Form
         foreach (var height in new[] { 82f, 56f, 112f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         Controls.Add(layout);
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78) };
+        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78), Tag = CollectorTheme.PreserveColors };
         var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
         var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), TextAlign = ContentAlignment.MiddleLeft };
         var info = new Button { Text = "Version Information", AccessibleName = "Version Information", Size = new Size(160, 34), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), Font = new Font("Segoe UI", 9), TextAlign = ContentAlignment.MiddleCenter, TabStop = true };
         info.Click += (_, _) => ShowVersionInformation();
         _toolTip.SetToolTip(info, "Version Information");
         _setup.Height = 34; _setup.FlatStyle = FlatStyle.Flat; _setup.ForeColor = Color.White; _setup.BackColor = Color.FromArgb(48, 76, 102); _setup.Font = new Font("Segoe UI", 9); _setup.TextAlign = ContentAlignment.MiddleCenter;
-        var headerActions = new Panel { Dock = DockStyle.Right, Width = 388, BackColor = header.BackColor };
-        headerActions.Controls.AddRange([_setup, info, _sound]);
+        var headerActions = new Panel { Dock = DockStyle.Right, Width = 432, BackColor = header.BackColor };
+        headerActions.Controls.AddRange([_setup, info, _sound, _theme]);
         void PositionHeaderActions()
         {
             var top = (headerActions.ClientSize.Height - 34) / 2;
-            _sound.Location = new Point(headerActions.ClientSize.Width - _sound.Width - 14, top);
+            _theme.Location = new Point(headerActions.ClientSize.Width - _theme.Width - 14, top);
+            _sound.Location = new Point(_theme.Left - _sound.Width - 8, top);
             info.Location = new Point(_sound.Left - info.Width - 8, top);
             _setup.Location = new Point(info.Left - _setup.Width - 8, top);
         }
@@ -106,6 +112,17 @@ internal sealed class CollectorForm : Form
             try { CollectorSettings.SaveSoundsEnabled(!_soundsEnabled); _soundsEnabled = !_soundsEnabled; if (!_soundsEnabled) CancelSounds(); UpdateSoundButton(); }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Sound Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         };
+        foreach (var preference in Enum.GetValues<ThemePreference>())
+        {
+            var item = new ToolStripMenuItem(preference == ThemePreference.System ? "System (default)" : preference.ToString()) { Tag = preference };
+            item.Click += (_, _) =>
+            {
+                try { CollectorSettings.SaveTheme(preference); _themePreference = preference; ApplyTheme(); }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, "Theme Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            };
+            _themeMenu.Items.Add(item);
+        }
+        _theme.Click += (_, _) => _themeMenu.Show(_theme, new Point(0, _theme.Height));
         header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions);
         header.Resize += (_, _) =>
         {
@@ -139,6 +156,20 @@ internal sealed class CollectorForm : Form
         var recordsPage = new TabPage("Recorded Drives") { Controls = { _grid } };
         _tabs.TabPages.Add(recordsPage);
         _tabs.TabPages.Add(new TabPage("Activity") { Controls = { _activity } });
+        _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
+        _tabs.DrawItem += (_, e) =>
+        {
+            var selected = e.Index == _tabs.SelectedIndex;
+            using var brush = new SolidBrush(selected ? CollectorTheme.Field(_dark) : CollectorTheme.Surface(_dark));
+            e.Graphics.FillRectangle(brush, e.Bounds);
+            if (e.Index == _tabs.TabCount - 1)
+            {
+                using var strip = new SolidBrush(CollectorTheme.Surface(_dark));
+                e.Graphics.FillRectangle(strip, e.Bounds.Right, e.Bounds.Top, Math.Max(0, _tabs.ClientSize.Width - e.Bounds.Right), e.Bounds.Height);
+            }
+            TextRenderer.DrawText(e.Graphics, _tabs.TabPages[e.Index].Text, _tabs.Font, e.Bounds, CollectorTheme.Text(_dark), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            if ((e.State & DrawItemState.Focus) != 0) ControlPaint.DrawFocusRectangle(e.Graphics, e.Bounds, CollectorTheme.Text(_dark), brush.Color);
+        };
         var terminalEntry = new Panel { Dock = DockStyle.Bottom, Height = 44, BackColor = Color.FromArgb(230, 234, 240) };
         _terminalInputFrame.Controls.Add(_terminalInput);
         _terminalInputFrame.Resize += (_, _) => _terminalInput.SetBounds(5, (_terminalInputFrame.ClientSize.Height - _terminalInput.Height) / 2, Math.Max(1, _terminalInputFrame.ClientSize.Width - 10), _terminalInput.Height);
@@ -230,18 +261,117 @@ internal sealed class CollectorForm : Form
             if (_busy || _modal) { _statusDisplay.Start(); return; }
             Activity(_paused ? "Scanning is paused." : _terminalSession is null ? "Waiting for a USB drive..." : "Terminal opened.");
         };
-        Shown += async (_, _) => await InitializeAsync();
+        if (initialize) Shown += async (_, _) => await InitializeAsync();
         FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _statusFade.Stop(); _statusDisplay.Stop(); _closing.Cancel(); CancelSounds(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
+        HandleCreated += (_, _) => ApplyTheme();
+        SystemEvents.UserPreferenceChanged += SystemThemeChanged;
+        Disposed += (_, _) => { SystemEvents.UserPreferenceChanged -= SystemThemeChanged; _themeMenu.Dispose(); _theme.Image?.Dispose(); };
+        ApplyTheme();
+    }
+    private void SystemThemeChanged(object? sender, UserPreferenceChangedEventArgs args)
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        try { BeginInvoke((Action)(() => { if (!IsDisposed) ApplyTheme(); })); }
+        catch (InvalidOperationException) { }
+    }
+    private void ApplyTheme()
+    {
+        _dark = CollectorTheme.IsDark(_themePreference);
+        CollectorTheme.Apply(this, _dark);
+        CollectorTheme.ApplyTitleBar(this, _dark);
+        foreach (Form dialog in OwnedForms) { CollectorTheme.Apply(dialog, _dark); CollectorTheme.ApplyTitleBar(dialog, _dark); }
+        _terminalOutput.BackColor = Color.FromArgb(18, 22, 28); _terminalOutput.ForeColor = Color.Gainsboro;
+        SetTerminalIndicator(_terminalSession is not null);
+        var oldIcon = _theme.Image; _theme.Image = CreateThemeIcon(_dark); oldIcon?.Dispose();
+        oldIcon = _refreshWorkbook.Image; _refreshWorkbook.Image = CreateRefreshIcon(_dark); oldIcon?.Dispose();
+        _theme.AccessibleName = $"Choose Theme: {_themePreference}";
+        _toolTip.SetToolTip(_theme, $"Theme: {_themePreference} ({(_dark ? "Dark" : "Light")}). Choose System, Light, or Dark.");
+        foreach (ToolStripMenuItem item in _themeMenu.Items) item.Checked = item.Tag is ThemePreference preference && preference == _themePreference;
+        _themeMenu.Renderer = new ToolStripProfessionalRenderer(new ThemeMenuColors(_dark));
+        _themeMenu.ForeColor = CollectorTheme.Text(_dark);
+        foreach (ToolStripMenuItem item in _themeMenu.Items) item.ForeColor = _themeMenu.ForeColor;
+        _statusFade.Stop(); _fadeTo = _fadeFrom = CollectorTheme.Surface(_dark);
+        if (_statusPanel is not null) _statusPanel.BackColor = _fadeTo;
+        _status.BackColor = _fadeTo;
+        FadeStatusBackground(_statusTone); ColorizeStatus();
+    }
+    private DialogResult ShowThemedDialog(Form dialog)
+    {
+        CollectorTheme.Apply(dialog, _dark);
+        EventHandler updateTitle = (_, _) => CollectorTheme.ApplyTitleBar(dialog, _dark);
+        dialog.HandleCreated += updateTitle;
+        try { return dialog.ShowDialog(this); }
+        finally { dialog.HandleCreated -= updateTitle; }
+    }
+    private static Bitmap CreateThemeIcon(bool dark)
+    {
+        var icon = new Bitmap(18, 18);
+        using var graphics = Graphics.FromImage(icon);
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var pen = new Pen(Color.White, 1.5f);
+        if (dark)
+        {
+            using var light = new SolidBrush(Color.White);
+            using var cutout = new SolidBrush(Color.FromArgb(48, 76, 102));
+            graphics.FillEllipse(light, 2, 2, 13, 13); graphics.FillEllipse(cutout, 7, 0, 12, 12);
+        }
+        else
+        {
+            graphics.DrawEllipse(pen, 5, 5, 8, 8);
+            for (var i = 0; i < 8; i++)
+            {
+                var angle = i * Math.PI / 4;
+                graphics.DrawLine(pen, 9 + (float)Math.Cos(angle) * 6, 9 + (float)Math.Sin(angle) * 6, 9 + (float)Math.Cos(angle) * 8, 9 + (float)Math.Sin(angle) * 8);
+            }
+        }
+        return icon;
+    }
+    internal static void VerifyThemes(string directory)
+    {
+        using var form = new CollectorForm(initialize: false) { ShowInTaskbar = false };
+        form.Show();
+        Application.DoEvents();
+        form._book.Records.Add(new DriveRecord { ["Manufacturer"] = "Example", ["Model"] = "THEME-CHECK", ["SerialNumber"] = "THEME-SERIAL" });
+        form.RefreshGrid();
+        var savedPreference = CollectorSettings.Theme();
+        foreach (var preference in new[] { ThemePreference.Dark, ThemePreference.Light, ThemePreference.System })
+        {
+            form._themePreference = preference; form.ApplyTheme();
+            form.PerformLayout();
+            Application.DoEvents();
+            if (form._theme.Size != form._sound.Size || form._theme.Left - form._sound.Right != 8 ||
+                form._grid.DefaultCellStyle.BackColor != CollectorTheme.Field(form._dark) ||
+                form._grid.Rows[0].Cells["SerialNumber"].Value?.ToString() != "THEME-SERIAL")
+                throw new InvalidDataException("Theme changed header spacing, grid colors, or recorded values.");
+            using var dialog = new Form();
+            var input = new TextBox { Text = "Unchanged", Dock = DockStyle.Top };
+            var link = new LinkLabel { Text = "Attributions", Dock = DockStyle.Top };
+            var summary = new RichTextBox { Text = "Review entry", Dock = DockStyle.Fill };
+            dialog.Controls.AddRange([input, link, summary]);
+            CollectorTheme.Apply(dialog, form._dark);
+            if (input.Text != "Unchanged" || input.BackColor != CollectorTheme.Field(form._dark) ||
+                summary.BackColor != input.BackColor || link.LinkColor == input.BackColor)
+                throw new InvalidDataException("Theme changed dialog values or made links unreadable.");
+            using var bitmap = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+            bitmap.Save(Path.Combine(directory, $"Collector-Theme-{preference}.png"));
+        }
+        if (CollectorSettings.Theme() != savedPreference) throw new InvalidDataException("Theme preview changed the saved preference.");
+        using var io = new EmbeddedTerminalIO();
+        form._terminalIO = io; form._tabs.SelectedTab = form._terminalPage;
+        form.TerminalKeyPress(form, new KeyPressEventArgs('r'));
+        if (!io.KeyAvailable || io.ReadKey() != 'R') throw new InvalidDataException("Embedded Terminal did not accept the removal shortcut.");
+        form._terminalIO = null;
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
-    private static Bitmap CreateRefreshIcon()
+    private static Bitmap CreateRefreshIcon(bool dark = false)
     {
         var icon = new Bitmap(16, 16);
         using var graphics = Graphics.FromImage(icon);
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(Color.FromArgb(25, 40, 55), 1.8f);
+        using var pen = new Pen(CollectorTheme.Text(dark), 1.8f);
         graphics.DrawArc(pen, 2.5f, 2.5f, 11f, 11f, 45f, 285f);
-        using var arrow = new SolidBrush(Color.FromArgb(25, 40, 55));
+        using var arrow = new SolidBrush(CollectorTheme.Text(dark));
         graphics.FillPolygon(arrow, [new PointF(14, 5), new PointF(10, 3), new PointF(11, 8)]);
         return icon;
     }
@@ -299,7 +429,14 @@ internal sealed class CollectorForm : Form
     private void ColorizeStatus()
     {
         _status.SelectAll();
-        _status.SelectionColor = _statusTone switch
+        _status.SelectionColor = _dark ? _statusTone switch
+        {
+            StatusTone.Reading => _pulseBright ? Color.FromArgb(174, 214, 255) : Color.FromArgb(132, 193, 255),
+            StatusTone.Error or StatusTone.Paused => Color.FromArgb(255, 161, 161),
+            StatusTone.Warning => _pulseBright ? Color.FromArgb(255, 222, 144) : Color.FromArgb(245, 205, 112),
+            StatusTone.Success => Color.FromArgb(146, 224, 182),
+            _ => CollectorTheme.Text(true)
+        } : _statusTone switch
         {
             StatusTone.Reading => _pulseBright ? Color.FromArgb(66, 111, 151) : Color.FromArgb(30, 69, 110),
             StatusTone.Error => _pulseBright ? Color.FromArgb(195, 73, 73) : Color.Firebrick,
@@ -314,13 +451,20 @@ internal sealed class CollectorForm : Form
         {
             var sentenceEnd = _status.Text.IndexOf('.', pausedAt);
             _status.Select(pausedAt, sentenceEnd >= 0 ? sentenceEnd - pausedAt + 1 : paused.Length);
-            _status.SelectionColor = Color.Firebrick;
+            _status.SelectionColor = _dark ? Color.FromArgb(255, 161, 161) : Color.Firebrick;
         }
         _status.Select(0, 0);
     }
     private void FadeStatusBackground(StatusTone tone)
     {
-        var target = tone switch
+        var target = _dark ? tone switch
+        {
+            StatusTone.Reading => Color.FromArgb(35, 53, 72),
+            StatusTone.Warning => Color.FromArgb(66, 53, 29),
+            StatusTone.Error or StatusTone.Paused => Color.FromArgb(70, 35, 42),
+            StatusTone.Success => Color.FromArgb(31, 58, 46),
+            _ => CollectorTheme.Surface(true)
+        } : tone switch
         {
             StatusTone.Reading => Color.FromArgb(222, 234, 246),
             StatusTone.Warning => Color.FromArgb(250, 240, 209),
@@ -439,7 +583,7 @@ internal sealed class CollectorForm : Form
         close.Click += (_, _) => { dialog.DialogResult = DialogResult.OK; dialog.Close(); };
         dialog.AcceptButton = close;
         dialog.Controls.AddRange([message, locationFrame, copy, open, close]);
-        if (dialog.ShowDialog(this) == DialogResult.OK) Close();
+        if (ShowThemedDialog(dialog) == DialogResult.OK) Close();
     }
     private void SubmitTerminalInput()
     {
@@ -466,7 +610,7 @@ internal sealed class CollectorForm : Form
         }
         e.Handled = true;
         var command = char.ToUpperInvariant(e.KeyChar);
-        if ("MLSPDHQ".Contains(command))
+        if ("MLSRPDHQ".Contains(command))
         {
             _terminalOutput.AppendText($"[{command}]{Environment.NewLine}");
             io.Submit(command.ToString());
@@ -594,6 +738,7 @@ internal sealed class CollectorForm : Form
             if (sortKey is not null && _grid.Columns.Contains(sortKey))
                 _grid.Sort(_grid.Columns[sortKey]!, sortOrder == SortOrder.Descending ? System.ComponentModel.ListSortDirection.Descending : System.ComponentModel.ListSortDirection.Ascending);
             _grid.ClearSelection();
+            CollectorTheme.Apply(_grid, _dark);
             RefreshFooter();
             _viewChanged = sortKey is not null;
         }
@@ -692,18 +837,18 @@ internal sealed class CollectorForm : Form
             "Transport: smartctl autodetection plus USB adapter fallbacks",
             "Workbook backend: Direct XLSX (no Excel COM)", "Timeout: 30 seconds per smartctl process",
             "Workbook columns: " + string.Join(", ", _book.Columns.Select(InventoryBook.Header)),
-            "", "Third-party credits",
+            "", "Attributions:", "",
             "Open XML SDK 3.3.0 — .NET Foundation and Contributors (MIT)",
-            "https://github.com/dotnet/Open-XML-SDK",
+            "https://github.com/dotnet/Open-XML-SDK", "",
             ".NET 8 / Windows Forms — .NET Foundation and Contributors (MIT)",
             "Includes System.Management, System.Text.Encoding.CodePages, System.IO.Packaging, and System.CodeDom",
             "https://github.com/dotnet/runtime",
-            "https://github.com/dotnet/winforms",
+            "https://github.com/dotnet/winforms", "",
             "smartmontools / smartctl — smartmontools developers (GPL-2.0-or-later)",
             "https://www.smartmontools.org/",
-            "smartctl is installed separately and is called as an external program.",
-            "Full bundled dependency notices: THIRD-PARTY-NOTICES.txt beside the executable",
-            "https://github.com/ShannonWetnight/usb-drive-inventory-collector/blob/main/THIRD-PARTY-NOTICES.txt"] };
+            "smartctl is installed separately and is called as an external program.", "",
+            "Full license text and attributions: LICENSE beside the executable",
+            "https://github.com/ShannonWetnight/usb-drive-inventory-collector/blob/main/LICENSE"] };
         var disclaimer = new Label { Text = "AI Workflow Notice: This project was written through AI prompting and reviewed by its maintainer. Check collected data against the drive label when accuracy matters.", Dock = DockStyle.Fill, Margin = Padding.Empty, ForeColor = Color.DimGray, Font = new Font("Segoe UI", 9), Padding = new Padding(2, 7, 0, 0) };
         void OpenLink(string? url)
         {
@@ -716,16 +861,16 @@ internal sealed class CollectorForm : Form
         layout.Controls.Add(title, 0, 0); layout.Controls.Add(maintainer, 0, 1); layout.Controls.Add(info, 0, 2); layout.Controls.Add(disclaimer, 0, 3);
         dialog.Controls.Add(layout);
         dialog.Shown += (_, _) => info.Select(0, 0);
-        dialog.ShowDialog(this);
+        ShowThemedDialog(dialog);
     }
     private void SetTerminalIndicator(bool enabled)
     {
         _terminalToggle.Text = enabled ? "Disable Terminal" : "Enable Terminal";
         _terminalToggle.AccessibleName = enabled ? "Disable Terminal" : "Enable Terminal";
-        _terminalToggle.FlatStyle = enabled ? FlatStyle.Flat : FlatStyle.Standard;
-        _terminalToggle.UseVisualStyleBackColor = !enabled;
-        _terminalToggle.BackColor = enabled ? Color.Firebrick : SystemColors.Control;
-        _terminalToggle.ForeColor = enabled ? Color.White : SystemColors.ControlText;
+        _terminalToggle.FlatStyle = enabled || _dark ? FlatStyle.Flat : FlatStyle.Standard;
+        _terminalToggle.UseVisualStyleBackColor = !enabled && !_dark;
+        _terminalToggle.BackColor = enabled ? Color.Firebrick : _dark ? Color.FromArgb(48, 55, 65) : SystemColors.Control;
+        _terminalToggle.ForeColor = enabled ? Color.White : CollectorTheme.Text(_dark);
         _toolTip.SetToolTip(_terminalToggle, enabled ? "Terminal is enabled. Click to close it." : "Terminal is disabled. Click to open it.");
     }
     private async Task OpenTerminalAsync()
@@ -762,7 +907,7 @@ internal sealed class CollectorForm : Form
             BeginInvoke((Action)(() => { if (!IsDisposed) { _paused = paused; if (paused) CancelSounds(); _pause.Text = paused ? "Resume Scanning" : "Pause Scanning"; Activity(paused ? "Terminal scanning paused." : "Terminal scanning resumed."); } }));
         });
         var generation = ++_terminalGeneration;
-        _terminalOutput.Clear(); _terminalInput.Clear(); _terminalInput.PlaceholderText = "Command or response"; _terminalInput.Enabled = true; _terminalInputFrame.BackColor = SystemColors.Window; _terminalSend.Enabled = true;
+        _terminalOutput.Clear(); _terminalInput.Clear(); _terminalInput.PlaceholderText = "Command or response"; _terminalInput.Enabled = true; _terminalInputFrame.BackColor = CollectorTheme.Field(_dark); _terminalSend.Enabled = true;
         _manual.Enabled = false; _setup.Enabled = false;
         SetTerminalIndicator(true);
         _tabs.SelectedTab = _terminalPage;
@@ -791,7 +936,7 @@ internal sealed class CollectorForm : Form
             _terminalSession = null; _terminalIO = null;
             if (!IsDisposed)
             {
-                _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalInputFrame.BackColor = SystemColors.Control; _terminalSend.Enabled = false;
+                _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalInputFrame.BackColor = CollectorTheme.Surface(_dark); _terminalSend.Enabled = false;
                 _manual.Enabled = true; _setup.Enabled = true;
                 SetTerminalIndicator(false);
                 _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage);
@@ -888,7 +1033,7 @@ internal sealed class CollectorForm : Form
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, "Setup was not applied: " + ex.Message); }
             };
             dialog.Controls.AddRange([intro, list, note, locationLabel, locationFrame, browse, logsLabel, logsFrame, browseLogs, all, defaults, apply, cancel]);
-            dialog.ShowDialog(this);
+            ShowThemedDialog(dialog);
         }
         finally { _modal = false; }
     }
@@ -961,7 +1106,7 @@ internal sealed class CollectorForm : Form
             };
             actions.Controls.AddRange([cancel, save, remove]);
             dialog.Controls.Add(fields); dialog.Controls.Add(actions); dialog.Controls.Add(intro);
-            dialog.ShowDialog(this);
+            ShowThemedDialog(dialog);
         }
         finally { _modal = false; }
     }
@@ -1091,7 +1236,7 @@ internal sealed class CollectorForm : Form
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, ex.Message, "Manual Drive Entry", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             };
-            dialog.Controls.AddRange([review, copy, back]); dialog.ShowDialog(this);
+            dialog.Controls.AddRange([review, copy, back]); ShowThemedDialog(dialog);
             void Fill(DriveRecord record)
             {
                 manufacturer.Text = record["Manufacturer"] == "N/A" ? "" : record["Manufacturer"];
@@ -1125,7 +1270,7 @@ internal sealed class CollectorForm : Form
             _toolTip.SetToolTip(saveCopy, "Save this drive and copy its details with a new serial number.");
             dialog.CancelButton = Choice("Cancel", "Cancel", 328, 142);
         }
-        dialog.ShowDialog(this); return action;
+        ShowThemedDialog(dialog); return action;
     }
 }
 
