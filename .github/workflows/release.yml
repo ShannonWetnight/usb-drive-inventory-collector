@@ -83,4 +83,5 @@ jobs:
           $exe = Join-Path $env:GITHUB_WORKSPACE "publish/USB-Drive-Inventory-Collector-$($env:RELEASE_VERSION).exe"
           $sums = Join-Path $env:GITHUB_WORKSPACE 'publish/SHA256SUMS.txt'
           $license = Join-Path $env:GITHUB_WORKSPACE 'publish/LICENSE'
-          gh release create "$env:RELEASE_VERSION" "$exe" "$sums" "$license" --target "$env:GITHUB_SHA" --title "USB Drive Inventory Collector $env:RELEASE_VERSION" --notes-file ".github/release-notes/$($env:RELEASE_VERSION).md"
+          $notices = Join-Path $env:GITHUB_WORKSPACE 'publish/THIRD-PARTY-NOTICES.txt'
+          gh release create "$env:RELEASE_VERSION" "$exe" "$sums" "$license" "$notices" --target "$env:GITHUB_SHA" --title "USB Drive Inventory Collector $env:RELEASE_VERSION" --notes-file ".github/release-notes/$($env:RELEASE_VERSION).md"
