@@ -15,7 +15,7 @@
 - [Files and Workbook](#files-and-workbook)
 - [Build from Source](#build-from-source)
 - [License](#license)
-- [Third-party Credits](#third-party-credits)
+- [Attributions](#attributions)
 
 ## Features
 
@@ -56,8 +56,9 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 | **Workbook Setup** | Selects optional identity columns, the workbook save location, and the logs save folder. |
 | **Terminal** tab | Shows the embedded terminal panel, initially disabled. |
 | **Enable Terminal / Disable Terminal** | Starts or stops the embedded terminal. Appears beside the tab when selected and remains visible while Terminal is running. |
-| **Version Information** | Opens the app version, license, technical details, and third-party credits with project links from the banner. |
+| **Version Information** | Opens the app version, license, technical details, and attributions with project links from the banner. |
 | Sound icon | Turns drive notification sounds on or off. The choice is saved for this Windows account. |
+| Theme icon beside Sound | Selects **System**, **Light**, or **Dark**. System is the default and follows the Windows app theme. The choice is saved for this Windows account. |
 | **Copy Path** | Copies the active workbook path to the clipboard. |
 | **Open Folder** | Opens the workbook's containing folder in File Explorer. |
 | **Reset View** | Appears when the Recorded Drives view changes. Restores default grid widths, row heights, sort order, and scroll position without changing the workbook. |
@@ -68,6 +69,8 @@ The main window includes **Recorded Drives**, **Activity**, and **Terminal** tab
 Drive types can be searched in the manual-entry list. Choose **Other** to enter a custom type. **Copy Last Drive** is available inside Manual Drive Entry.
 
 To remove a record, double-click it in **Recorded Drives**, select **Remove Entry**, and confirm the model and serial number. The confirmation defaults to **No**. Removal discards any unsaved edits in the dialog, updates the workbook immediately, and renumbers the remaining records. If saving fails, the entry stays in the app. Disable Terminal and wait for any current drive read to finish before editing or removing entries.
+
+The theme applies to the main window and the collector's custom dialogs. Selecting **System** follows Windows theme changes while the app is open. Native Windows prompts and file pickers use Windows styling; the embedded Terminal keeps its console colors.
 
 ### Terminal Interface
 
@@ -125,7 +128,7 @@ Build on Windows with the .NET 8 SDK:
 dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output publish
 ```
 
-The [Build Windows GUI](.github/workflows/build-native.yml) workflow builds pull requests and uploads an unsigned preview executable. The [Publish Signed Release](.github/workflows/release.yml) workflow checks the version and release notes, signs the executable through Azure Artifact Signing, verifies its publisher, and attaches the executable, SHA-256 checksum, `LICENSE`, and `THIRD-PARTY-NOTICES.txt` to a GitHub release. Both notice files are also included in preview downloads.
+The [Build Windows GUI](.github/workflows/build-native.yml) workflow builds pull requests and uploads an unsigned preview executable. The [Publish Signed Release](.github/workflows/release.yml) workflow checks the version and release notes, signs the executable through Azure Artifact Signing, verifies its publisher, and attaches the executable, SHA-256 checksum, and `LICENSE` to a GitHub release. The combined `LICENSE` contains the collector's MIT license followed by dependency attributions and upstream license notices. It is also included in preview downloads.
 
 ## License
 
@@ -133,7 +136,7 @@ The [Build Windows GUI](.github/workflows/build-native.yml) workflow builds pull
 
 The MIT license was adopted after v4.3.3. Code previously released under the Unlicense retains its public-domain dedication; this change does not revoke those permissions. MIT's notice requirement applies to new copyrightable contributions covered by the MIT license.
 
-## Third-party Credits
+## Attributions
 
 The collector depends on work by these projects and their contributors:
 
@@ -144,4 +147,4 @@ The collector depends on work by these projects and their contributors:
 | [Windows Forms](https://github.com/dotnet/winforms) | Provides the desktop interface. | .NET Foundation and Contributors; [MIT](https://github.com/dotnet/winforms/blob/v8.0.0/LICENSE.TXT), with additional upstream notices. |
 | [smartmontools / smartctl](https://www.smartmontools.org/) | Reads drive identity and SMART information for automatic scanning. | smartmontools developers; [GPL-2.0-or-later source](https://github.com/smartmontools/smartmontools). Installed separately and invoked as an external program. |
 
-Full license text and upstream notice collections for bundled dependencies are in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Keep this file and `LICENSE` with distributed copies. Project links also appear at the bottom of **Version Information**.
+Full license text and upstream notice collections for bundled dependencies appear under **Attributions:** in [LICENSE](LICENSE), after the collector's MIT license. Keep this combined file with distributed copies. Project links also appear at the bottom of **Version Information**.

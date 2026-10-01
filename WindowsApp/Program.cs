@@ -48,6 +48,8 @@ internal static class Program
                     if (!migrated.Descendants().Any(t => t.Name.LocalName == "t" && t.Value == "Manufacturer") || migrated.Descendants().Any(t => t.Name.LocalName == "t" && t.Value == "Make")) throw new InvalidDataException("Legacy header migration failed.");
                 }
                 VerifyEntryRemoval();
+                ApplicationConfiguration.Initialize();
+                CollectorForm.VerifyThemes(Path.GetDirectoryName(args[1])!);
             }
             catch (Exception ex) { File.WriteAllText(args[1] + ".error.txt", ex.ToString()); Environment.ExitCode = 1; }
             return;
