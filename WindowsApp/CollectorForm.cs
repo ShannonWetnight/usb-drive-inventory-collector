@@ -291,7 +291,7 @@ internal sealed class CollectorForm : Form
         _toolTip.SetToolTip(_theme, $"Switch to {next} mode" + (_themePreference == ThemePreference.System ? " (currently following Windows)" : ""));
         _statusFade.Stop(); _fadeTo = _fadeFrom = CollectorTheme.Surface(_dark);
         if (_statusPanel is not null) _statusPanel.BackColor = _fadeTo;
-        _status.BackColor = _fadeTo;
+        _status.BackColor = _guidance.BackColor = _fadeTo;
         FadeStatusBackground(_statusTone); ColorizeStatus();
     }
     private static ThemePreference OppositeTheme(bool dark) => dark ? ThemePreference.Light : ThemePreference.Dark;
@@ -396,6 +396,16 @@ internal sealed class CollectorForm : Form
                 if (!manual.Controls.OfType<Label>().Single(c => c.Text == "Custom Capacity Unit").Visible)
                     throw new InvalidDataException("Custom capacity unit field did not appear.");
             });
+            foreach (var tone in new[] { StatusTone.Paused, StatusTone.Success })
+            {
+                form._statusTone = tone;
+                form._status.Text = tone == StatusTone.Paused ? "Scanning is paused." : "Manual drive recorded.";
+                form.FadeStatusBackground(tone);
+                form._fadeStart = Stopwatch.GetTimestamp() - Stopwatch.Frequency;
+                form.AdvanceStatusFade(); form.ColorizeStatus();
+                SavePreview(form, directory, $"{preference}-Status-{tone}");
+            }
+            form._statusTone = StatusTone.Default; form._status.Text = "Initializing..."; form.ApplyTheme();
         }
         if (CollectorSettings.Theme() != savedPreference) throw new InvalidDataException("Theme preview changed the saved preference.");
         using var io = new EmbeddedTerminalIO();
@@ -553,7 +563,7 @@ internal sealed class CollectorForm : Form
         byte Channel(byte a, byte b) => (byte)Math.Round(a + (b - a) * eased);
         var color = Color.FromArgb(Channel(_fadeFrom.R, _fadeTo.R), Channel(_fadeFrom.G, _fadeTo.G), Channel(_fadeFrom.B, _fadeTo.B));
         _statusPanel.BackColor = color;
-        _status.BackColor = color;
+        _status.BackColor = _guidance.BackColor = color;
         if (progress >= 1) _statusFade.Stop();
     }
     private void CancelSounds()
