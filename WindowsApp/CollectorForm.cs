@@ -356,13 +356,16 @@ internal sealed class CollectorForm : Form
             if (input.Text != "Unchanged" || input.BackColor != CollectorTheme.Field(form._dark) ||
                 summary.BackColor != input.BackColor || link.LinkColor == input.BackColor)
                 throw new InvalidDataException("Theme changed dialog values or made links unreadable.");
-            var statusLeft = form._statusPanel!.PointToScreen(Point.Empty).X;
+            var statusPanel = form._statusPanel!;
+            var workbookHost = form._tabs.Parent!;
+            var banner = form._theme.Parent!.Parent!;
+            var statusLeft = statusPanel.Parent!.PointToScreen(statusPanel.Location).X;
             if (form._pause.PointToScreen(Point.Empty).X != statusLeft ||
-                form._tabs.Parent!.PointToScreen(Point.Empty).X != statusLeft ||
-                form._tabs.Parent.Width != form._statusPanel.Width ||
+                workbookHost.PointToScreen(Point.Empty).X != statusLeft ||
+                workbookHost.Width != statusPanel.Width ||
                 form._manual.Left - form._pause.Right != form._pause.Margin.Right || form._finish.Left - form._manual.Right != form._manual.Margin.Right ||
-                form._theme.Parent!.Parent!.Margin != Padding.Empty)
-                throw new InvalidDataException($"Inconsistent margins: pause={form._pause.PointToScreen(Point.Empty).X}, status={statusLeft}, tabs={form._tabs.Parent.PointToScreen(Point.Empty).X}, widths={form._tabs.Parent.Width}/{form._statusPanel.Width}, gaps={form._manual.Left - form._pause.Right}/{form._finish.Left - form._manual.Right}, margins={form._pause.Margin.Right}/{form._manual.Margin.Right}, header={form._theme.Parent.Parent.Margin}.");
+                banner.Margin != Padding.Empty)
+                throw new InvalidDataException($"Inconsistent margins: pause={form._pause.PointToScreen(Point.Empty).X}, status={statusLeft}, tabs={workbookHost.PointToScreen(Point.Empty).X}, widths={workbookHost.Width}/{statusPanel.Width}.");
             SavePreview(form, directory, preference.ToString());
             form._viewChanged = true; form.UpdateResetViewButton();
             form._tabs.SelectedIndex = 1;
