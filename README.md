@@ -59,8 +59,6 @@ The preview cycles through the app's tabs and dialogs every 4.5 seconds. Each fu
 
 </details>
 
-The [capture instructions](.github/showcase/README.md) explain how to refresh the screenshots and GIF.
-
 ## Download and Run
 
 The next tagged version is **4.3.5**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.3.5.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
