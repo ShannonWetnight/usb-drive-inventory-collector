@@ -7,7 +7,7 @@ using Microsoft.Win32;
 
 namespace USBDriveInventoryCollector;
 
-internal sealed class CollectorForm : Form
+internal sealed partial class CollectorForm : Form
 {
     private enum StatusTone { Default, Reading, Success, Warning, Error, Paused }
     private enum DriveNotification { Saved, Duplicate, Error, TerminalEnabled, TerminalDisabled }
@@ -300,7 +300,27 @@ internal sealed class CollectorForm : Form
         CollectorTheme.Apply(dialog, _dark);
         EventHandler updateTitle = (_, _) => CollectorTheme.ApplyTitleBar(dialog, _dark);
         dialog.HandleCreated += updateTitle;
-        try { return dialog.ShowDialog(this); }
+        try
+        {
+#if SHOWCASE_CAPTURE
+            if (_showcasePreview is null) return dialog.ShowDialog(this);
+            Exception? captureError = null;
+            using var captureTimer = new System.Windows.Forms.Timer { Interval = 200 };
+            captureTimer.Tick += (_, _) =>
+            {
+                captureTimer.Stop();
+                try { _showcasePreview(dialog); }
+                catch (Exception ex) { captureError = ex; }
+                finally { dialog.Close(); }
+            };
+            dialog.Shown += (_, _) => captureTimer.Start();
+            var result = dialog.ShowDialog(this);
+            if (captureError is not null) throw captureError;
+            return result;
+#else
+            return dialog.ShowDialog(this);
+#endif
+        }
         finally { dialog.HandleCreated -= updateTitle; }
     }
     private static Bitmap CreateThemeIcon(bool dark)

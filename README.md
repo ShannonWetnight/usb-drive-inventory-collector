@@ -5,6 +5,7 @@
 ## Table of Contents
 
 - [Features](#features)
+- [Showcase](#showcase)
 - [Download and Run](#download-and-run)
 - [Interfaces](#interfaces)
   - [Graphical Interface](#graphical-interface)
@@ -32,6 +33,33 @@
 - Displays a record number in the app without adding a column to the workbook.
 - Restores the Recorded Drives layout with Reset View without changing workbook data.
 - Uses distinct reading, error, and saved-record status colors in the graphical interface.
+
+## Showcase
+
+The preview cycles through the app's tabs and dialogs every 4.5 seconds. Each function appears in Light Theme, then Dark Theme, using default opening sizes and fictional sample records. Smaller windows are centered in the animation without scaling. The Terminal capture shows the tab before its session is enabled.
+
+![USB Drive Inventory Collector function showcase](.github/showcase/showcase_functions.gif)
+
+<details>
+<summary>View Individual PNG Screenshots</summary>
+
+| Function | Light Theme | Dark Theme |
+| --- | --- | --- |
+| Recorded Drives | [PNG](.github/showcase/showcase_recorded_drives_light_mode.png) | [PNG](.github/showcase/showcase_recorded_drives_dark_mode.png) |
+| Manual Drive Entry | [PNG](.github/showcase/showcase_manual_entry_light_mode.png) | [PNG](.github/showcase/showcase_manual_entry_dark_mode.png) |
+| Review Entry | [PNG](.github/showcase/showcase_review_entry_light_mode.png) | [PNG](.github/showcase/showcase_review_entry_dark_mode.png) |
+| Duplicate Serial Warning | [PNG](.github/showcase/showcase_duplicate_serial_light_mode.png) | [PNG](.github/showcase/showcase_duplicate_serial_dark_mode.png) |
+| Edit Entry and Remove Entry Option | [PNG](.github/showcase/showcase_edit_entry_light_mode.png) | [PNG](.github/showcase/showcase_edit_entry_dark_mode.png) |
+| Removal Confirmation | [PNG](.github/showcase/showcase_remove_entry_light_mode.png) | [PNG](.github/showcase/showcase_remove_entry_dark_mode.png) |
+| Workbook Setup | [PNG](.github/showcase/showcase_workbook_setup_light_mode.png) | [PNG](.github/showcase/showcase_workbook_setup_dark_mode.png) |
+| Activity History | [PNG](.github/showcase/showcase_activity_light_mode.png) | [PNG](.github/showcase/showcase_activity_dark_mode.png) |
+| Terminal Tab | [PNG](.github/showcase/showcase_terminal_light_mode.png) | [PNG](.github/showcase/showcase_terminal_dark_mode.png) |
+| Paused Scanning | [PNG](.github/showcase/showcase_paused_scanning_light_mode.png) | [PNG](.github/showcase/showcase_paused_scanning_dark_mode.png) |
+| Version Information | [PNG](.github/showcase/showcase_version_info_light_mode.png) | [PNG](.github/showcase/showcase_version_info_dark_mode.png) |
+
+</details>
+
+The [capture instructions](.github/showcase/README.md) explain how to refresh the screenshots and GIF.
 
 ## Download and Run
 

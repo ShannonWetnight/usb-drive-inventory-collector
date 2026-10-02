@@ -36,6 +36,24 @@ jobs:
           }
           python -m pip install --quiet openpyxl==3.1.5
           python -c "from openpyxl import load_workbook; import sys; w=load_workbook(sys.argv[1]); assert w.active['C2'].value == 'TEST-SERIAL'" $path
+      - name: Publish opt-in showcase capture build
+        run: dotnet publish WindowsApp/USBDriveInventoryCollector.csproj --configuration Release --runtime win-x64 --self-contained true -p:ShowcaseCapture=true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:IncludeAllContentForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false --output showcase-publish
+      - name: Capture default-size function showcase
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP 'Collector-Showcase'
+          $exe = Join-Path (Resolve-Path showcase-publish) 'USB-Drive-Inventory-Collector-v${{ steps.app-version.outputs.version }}.exe'
+          $result = Start-Process -FilePath $exe -ArgumentList @('--capture-showcase', $path) -Wait -PassThru
+          if ($result.ExitCode -ne 0) {
+            if (Test-Path "$path/capture-error.txt") { Get-Content "$path/capture-error.txt" }
+            throw 'Function showcase capture failed.'
+          }
+          if ((Get-ChildItem "$path/showcase_*.png").Count -ne 22) { throw 'Showcase screenshots are missing.' }
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Function-Showcase-v${{ steps.app-version.outputs.version }}
+          path: ${{ runner.temp }}/Collector-Showcase
+          if-no-files-found: error
       - uses: actions/upload-artifact@v6
         with:
           name: Theme-Previews-v${{ steps.app-version.outputs.version }}
