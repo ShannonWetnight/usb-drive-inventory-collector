@@ -5,6 +5,7 @@
 ## Table of Contents
 
 - [Features](#features)
+- [Showcase](#showcase)
 - [Download and Run](#download-and-run)
 - [Interfaces](#interfaces)
   - [Graphical Interface](#graphical-interface)
@@ -32,6 +33,33 @@
 - Displays a record number in the app without adding a column to the workbook.
 - Restores the Recorded Drives layout with Reset View without changing workbook data.
 - Uses distinct reading, error, and saved-record status colors in the graphical interface.
+
+## Showcase
+
+The preview cycles through the app's tabs and dialogs every six seconds. Captures use the default opening sizes and fictional sample records. Smaller windows are centered in the animation without scaling. The Terminal capture shows the tab before its session is enabled.
+
+![USB Drive Inventory Collector function showcase](.github/showcase/showcase_functions.gif)
+
+<details>
+<summary>View individual PNG screenshots in either theme</summary>
+
+| Function | Dark theme | Light theme |
+| --- | --- | --- |
+| Recorded Drives | [PNG](.github/showcase/showcase_recorded_drives.png) | [PNG](.github/showcase/showcase_recorded_drives2.png) |
+| Manual Drive Entry | [PNG](.github/showcase/showcase_manual_entry.png) | [PNG](.github/showcase/showcase_manual_entry2.png) |
+| Review entry | [PNG](.github/showcase/showcase_review_entry.png) | [PNG](.github/showcase/showcase_review_entry2.png) |
+| Duplicate serial warning | [PNG](.github/showcase/showcase_duplicate_serial.png) | [PNG](.github/showcase/showcase_duplicate_serial2.png) |
+| Edit entry and Remove Entry option | [PNG](.github/showcase/showcase_edit_entry.png) | [PNG](.github/showcase/showcase_edit_entry2.png) |
+| Removal confirmation | [PNG](.github/showcase/showcase_remove_entry.png) | [PNG](.github/showcase/showcase_remove_entry2.png) |
+| Workbook Setup | [PNG](.github/showcase/showcase_workbook_setup.png) | [PNG](.github/showcase/showcase_workbook_setup2.png) |
+| Activity history | [PNG](.github/showcase/showcase_activity.png) | [PNG](.github/showcase/showcase_activity2.png) |
+| Terminal tab | [PNG](.github/showcase/showcase_terminal.png) | [PNG](.github/showcase/showcase_terminal2.png) |
+| Paused scanning | [PNG](.github/showcase/showcase_paused_scanning.png) | [PNG](.github/showcase/showcase_paused_scanning2.png) |
+| Version Information | [PNG](.github/showcase/showcase_version_info.png) | [PNG](.github/showcase/showcase_version_info2.png) |
+
+</details>
+
+The [capture instructions](.github/showcase/README.md) explain how to refresh the screenshots and GIF.
 
 ## Download and Run
 

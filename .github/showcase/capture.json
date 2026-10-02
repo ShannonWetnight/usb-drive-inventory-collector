@@ -1,0 +1,156 @@
+[
+  {
+    "file": "showcase_recorded_drives.png",
+    "theme": "Dark",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_activity.png",
+    "theme": "Dark",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_terminal.png",
+    "theme": "Dark",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_manual_entry.png",
+    "theme": "Dark",
+    "title": "Manual Drive Entry",
+    "width": 576,
+    "height": 449
+  },
+  {
+    "file": "showcase_review_entry.png",
+    "theme": "Dark",
+    "title": "Review Manual Drive",
+    "width": 506,
+    "height": 384
+  },
+  {
+    "file": "showcase_duplicate_serial.png",
+    "theme": "Dark",
+    "title": "Duplicate Serial Number",
+    "width": 506,
+    "height": 384
+  },
+  {
+    "file": "showcase_edit_entry.png",
+    "theme": "Dark",
+    "title": "Edit Recorded Drive \u2013 Row 2",
+    "width": 666,
+    "height": 609
+  },
+  {
+    "file": "showcase_remove_entry.png",
+    "theme": "Dark",
+    "title": "Confirm Remove Entry",
+    "width": 414,
+    "height": 218
+  },
+  {
+    "file": "showcase_workbook_setup.png",
+    "theme": "Dark",
+    "title": "Workbook Setup",
+    "width": 566,
+    "height": 659
+  },
+  {
+    "file": "showcase_version_info.png",
+    "theme": "Dark",
+    "title": "Version Information",
+    "width": 716,
+    "height": 419
+  },
+  {
+    "file": "showcase_paused_scanning.png",
+    "theme": "Dark",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_recorded_drives2.png",
+    "theme": "Light",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_activity2.png",
+    "theme": "Light",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_terminal2.png",
+    "theme": "Light",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  },
+  {
+    "file": "showcase_manual_entry2.png",
+    "theme": "Light",
+    "title": "Manual Drive Entry",
+    "width": 576,
+    "height": 449
+  },
+  {
+    "file": "showcase_review_entry2.png",
+    "theme": "Light",
+    "title": "Review Manual Drive",
+    "width": 506,
+    "height": 384
+  },
+  {
+    "file": "showcase_duplicate_serial2.png",
+    "theme": "Light",
+    "title": "Duplicate Serial Number",
+    "width": 506,
+    "height": 384
+  },
+  {
+    "file": "showcase_edit_entry2.png",
+    "theme": "Light",
+    "title": "Edit Recorded Drive \u2013 Row 2",
+    "width": 666,
+    "height": 609
+  },
+  {
+    "file": "showcase_remove_entry2.png",
+    "theme": "Light",
+    "title": "Confirm Remove Entry",
+    "width": 414,
+    "height": 218
+  },
+  {
+    "file": "showcase_workbook_setup2.png",
+    "theme": "Light",
+    "title": "Workbook Setup",
+    "width": 566,
+    "height": 659
+  },
+  {
+    "file": "showcase_version_info2.png",
+    "theme": "Light",
+    "title": "Version Information",
+    "width": 716,
+    "height": 419
+  },
+  {
+    "file": "showcase_paused_scanning2.png",
+    "theme": "Light",
+    "title": "USB Drive Inventory Collector",
+    "width": 1030,
+    "height": 720
+  }
+]
