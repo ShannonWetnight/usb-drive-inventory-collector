@@ -80,12 +80,22 @@ internal sealed partial class CollectorForm
 
             void Preview(string name, Action open)
             {
-                form._showcasePreview = dialog => Save(dialog, name);
+                form._showcasePreview = dialog =>
+                {
+                    if (name == "workbook_setup")
+                    {
+                        var logs = ControlsIn(dialog).OfType<TextBox>().Single(input => input.Text == CollectorSettings.LogsDirectory());
+                        logs.Text = Path.GetDirectoryName(form._logPath)!;
+                    }
+                    Save(dialog, name);
+                };
                 try { open(); }
                 finally { form._showcasePreview = null; }
             }
             void Save(Form window, string name)
             {
+                CollectorTheme.ApplyTitleBar(window, form._dark);
+                window.Activate();
                 window.Refresh();
                 Application.DoEvents();
                 SaveHandle(window.Handle, window.Text, name);
