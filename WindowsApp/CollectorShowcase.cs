@@ -53,7 +53,7 @@ internal sealed partial class CollectorForm
             Save(form, "terminal");
             form._tabs.SelectedIndex = 0;
 
-            form.ManualEntry(true, dialog => Save(dialog, "manual_entry"));
+            Preview("manual_entry", () => form.ManualEntry(true));
             Preview("review_entry", () => form.Review(sample, duplicate: false));
             Preview("duplicate_serial", () => form.Review(sample, duplicate: true));
             form._showcasePreview = dialog =>
@@ -94,8 +94,6 @@ internal sealed partial class CollectorForm
             }
             void Save(Form window, string name)
             {
-                CollectorTheme.ApplyTitleBar(window, form._dark);
-                window.Activate();
                 window.Refresh();
                 Application.DoEvents();
                 SaveHandle(window.Handle, window.Text, name);
@@ -115,6 +113,16 @@ internal sealed partial class CollectorForm
                     }
                     finally { graphics.ReleaseHdc(dc); }
                 }
+                var samples = 0;
+                var black = 0;
+                for (var x = 20; x < width - 20; x += 20)
+                    for (var y = 45; y < height - 20; y += 20)
+                    {
+                        samples++;
+                        if (bitmap.GetPixel(x, y).ToArgb() == Color.Black.ToArgb()) black++;
+                    }
+                if (samples == 0 || black > samples * 0.9)
+                    throw new InvalidDataException($"Windows returned a blank capture for {title} ({preference}).");
                 var file = $"showcase_{name}{suffix}.png";
                 bitmap.Save(Path.Combine(directory, file), ImageFormat.Png);
                 captures.Add(new { file, theme = preference.ToString(), title, width, height });

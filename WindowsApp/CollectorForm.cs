@@ -303,11 +303,19 @@ internal sealed partial class CollectorForm : Form
         try
         {
             if (_showcasePreview is null) return dialog.ShowDialog(this);
-            dialog.Show(this);
-            Application.DoEvents();
-            _showcasePreview(dialog);
-            dialog.Close();
-            return DialogResult.Cancel;
+            Exception? captureError = null;
+            using var captureTimer = new System.Windows.Forms.Timer { Interval = 200 };
+            captureTimer.Tick += (_, _) =>
+            {
+                captureTimer.Stop();
+                try { _showcasePreview(dialog); }
+                catch (Exception ex) { captureError = ex; }
+                finally { dialog.Close(); }
+            };
+            dialog.Shown += (_, _) => captureTimer.Start();
+            var result = dialog.ShowDialog(this);
+            if (captureError is not null) throw captureError;
+            return result;
         }
         finally { dialog.HandleCreated -= updateTitle; }
     }
