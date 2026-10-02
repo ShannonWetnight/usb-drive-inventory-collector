@@ -76,17 +76,3 @@ internal static class CollectorTheme
         _ = DwmSetWindowAttribute(form.Handle, 20, ref enabled, sizeof(int));
     }
 }
-
-internal sealed class ThemeMenuColors(bool dark) : ProfessionalColorTable
-{
-    public override Color ToolStripDropDownBackground => CollectorTheme.Field(dark);
-    public override Color ImageMarginGradientBegin => CollectorTheme.Field(dark);
-    public override Color ImageMarginGradientMiddle => CollectorTheme.Field(dark);
-    public override Color ImageMarginGradientEnd => CollectorTheme.Field(dark);
-    public override Color MenuItemSelected => dark ? Color.FromArgb(66, 93, 122) : Color.FromArgb(217, 231, 246);
-    public override Color MenuItemBorder => MenuItemSelected;
-    public override Color MenuBorder => dark ? Color.FromArgb(89, 101, 115) : SystemColors.ControlDark;
-    public override Color CheckBackground => Color.FromArgb(217, 231, 246);
-    public override Color CheckSelectedBackground => CheckBackground;
-    public override Color CheckPressedBackground => CheckBackground;
-}

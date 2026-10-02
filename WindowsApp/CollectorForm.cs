@@ -42,7 +42,7 @@ internal sealed class CollectorForm : Form
     private readonly Button _openPath = new() { Text = "Open Folder", Size = new Size(110, 28) };
     private readonly DataGridView _grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None, SelectionMode = DataGridViewSelectionMode.FullRowSelect, EnableHeadersVisualStyles = false, ColumnHeadersHeight = 34 };
     private readonly ListBox _activity = new() { Dock = DockStyle.Fill, HorizontalScrollbar = true, Font = new Font("Consolas", 9) };
-    private readonly TabControl _tabs = new() { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(130, 36) };
+    private readonly CollectorTabControl _tabs = new() { Dock = DockStyle.Fill, SizeMode = TabSizeMode.Fixed, ItemSize = new Size(130, 36) };
     private readonly RichTextBox _terminalOutput = new() { Dock = DockStyle.Fill, ReadOnly = true, TabStop = false, BackColor = Color.FromArgb(18, 22, 28), ForeColor = Color.Gainsboro, Font = new Font("Consolas", 10), BorderStyle = BorderStyle.None };
     private readonly TextBox _terminalInput = new() { Font = new Font("Consolas", 10), Text = "Terminal disabled", BorderStyle = BorderStyle.None, Enabled = false };
     private readonly Panel _terminalInputFrame = new() { BorderStyle = BorderStyle.FixedSingle, BackColor = SystemColors.Control };
@@ -57,8 +57,8 @@ internal sealed class CollectorForm : Form
     private readonly Button _manual = new() { Text = "Manual Drive Entry", Width = 175 };
     private readonly Button _setup = new() { Text = "Workbook Setup", Width = 150 };
     private readonly Button _sound = new() { Width = 36, Height = 34, Image = CreateSoundIcon(true), ImageAlign = ContentAlignment.MiddleCenter, Padding = Padding.Empty, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), TextAlign = ContentAlignment.MiddleCenter };
-    private readonly Button _theme = new() { Width = 36, Height = 34, ImageAlign = ContentAlignment.MiddleCenter, Padding = Padding.Empty, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), AccessibleName = "Choose Theme" };
-    private readonly ContextMenuStrip _themeMenu = new();
+    private readonly Button _theme = new() { Width = 36, Height = 34, ImageAlign = ContentAlignment.MiddleCenter, Padding = Padding.Empty, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), AccessibleName = "Toggle Theme" };
+    private readonly Panel _tabActions = new();
     private ThemePreference _themePreference = CollectorSettings.Theme();
     private bool _dark;
     private readonly Button _terminalToggle = new() { Text = "Enable Terminal", Width = 140, Height = 24, Visible = false };
@@ -79,7 +79,7 @@ internal sealed class CollectorForm : Form
         foreach (var height in new[] { 82f, 56f, 112f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         Controls.Add(layout);
-        var header = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(32, 55, 78), Tag = CollectorTheme.PreserveColors };
+        var header = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty, BackColor = Color.FromArgb(32, 55, 78), Tag = CollectorTheme.PreserveColors };
         var title = new Label { Text = "USB Drive Inventory Collector", ForeColor = Color.White, Font = new Font("Segoe UI", 18, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft };
         var subtitle = new Label { Text = "One drive at a time. Every record is saved immediately.", ForeColor = Color.FromArgb(215, 229, 238), TextAlign = ContentAlignment.MiddleLeft };
         var info = new Button { Text = "Version Information", AccessibleName = "Version Information", Size = new Size(160, 34), FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.FromArgb(48, 76, 102), Font = new Font("Segoe UI", 9), TextAlign = ContentAlignment.MiddleCenter, TabStop = true };
@@ -112,17 +112,17 @@ internal sealed class CollectorForm : Form
             try { CollectorSettings.SaveSoundsEnabled(!_soundsEnabled); _soundsEnabled = !_soundsEnabled; if (!_soundsEnabled) CancelSounds(); UpdateSoundButton(); }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "Sound Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         };
-        foreach (var preference in Enum.GetValues<ThemePreference>())
+        _theme.Click += (_, _) =>
         {
-            var item = new ToolStripMenuItem(preference == ThemePreference.System ? "System (default)" : preference.ToString()) { Tag = preference };
-            item.Click += (_, _) =>
+            try
             {
-                try { CollectorSettings.SaveTheme(preference); _themePreference = preference; ApplyTheme(); }
-                catch (Exception ex) { MessageBox.Show(this, ex.Message, "Theme Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-            };
-            _themeMenu.Items.Add(item);
-        }
-        _theme.Click += (_, _) => _themeMenu.Show(_theme, new Point(0, _theme.Height));
+                var preference = OppositeTheme(_dark);
+                CollectorSettings.SaveTheme(preference);
+                _themePreference = preference;
+                ApplyTheme();
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Theme Preference", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        };
         header.Controls.Add(subtitle); header.Controls.Add(title); header.Controls.Add(headerActions);
         header.Resize += (_, _) =>
         {
@@ -131,7 +131,7 @@ internal sealed class CollectorForm : Form
             subtitle.SetBounds(22, 40, width - 2, 25);
         };
         layout.Controls.Add(header, 0, 0);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(12, 10, 0, 0) };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty, Padding = new Padding(12, 13, 0, 0) };
         _finish.Width = _setup.Width;
         foreach (var b in new[] { _pause, _manual, _finish }) { b.Height = 34; b.Margin = new Padding(0, 0, 8, 0); actions.Controls.Add(b); }
         layout.Controls.Add(actions, 0, 1);
@@ -162,11 +162,6 @@ internal sealed class CollectorForm : Form
             var selected = e.Index == _tabs.SelectedIndex;
             using var brush = new SolidBrush(selected ? CollectorTheme.Field(_dark) : CollectorTheme.Surface(_dark));
             e.Graphics.FillRectangle(brush, e.Bounds);
-            if (e.Index == _tabs.TabCount - 1)
-            {
-                using var strip = new SolidBrush(CollectorTheme.Surface(_dark));
-                e.Graphics.FillRectangle(strip, e.Bounds.Right, e.Bounds.Top, Math.Max(0, _tabs.ClientSize.Width - e.Bounds.Right), e.Bounds.Height);
-            }
             TextRenderer.DrawText(e.Graphics, _tabs.TabPages[e.Index].Text, _tabs.Font, e.Bounds, CollectorTheme.Text(_dark), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             if ((e.State & DrawItemState.Focus) != 0) ControlPaint.DrawFocusRectangle(e.Graphics, e.Bounds, CollectorTheme.Text(_dark), brush.Color);
         };
@@ -181,16 +176,24 @@ internal sealed class CollectorForm : Form
             _terminalInputFrame.SetBounds(8, top, Math.Max(80, _terminalSend.Left - 16), 28);
         };
         _terminalPage.Controls.Add(_terminalOutput); _terminalPage.Controls.Add(terminalEntry); _tabs.TabPages.Add(_terminalPage);
-        var tabHost = new Panel { Dock = DockStyle.Fill };
-        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_terminalToggle); tabHost.Controls.Add(_resetView); tabHost.Controls.Add(_refreshWorkbook);
+        var tabHost = new Panel { Dock = DockStyle.Fill, Margin = new Padding(12, 3, 12, 3) };
+        // Keep an opaque strip present even when its buttons are hidden. Native
+        // TabControl painting otherwise leaves pale rectangles behind the overlays.
+        _tabActions.Controls.AddRange([_terminalToggle, _resetView, _refreshWorkbook]);
+        _tabs.HeaderActions = _tabActions;
+        tabHost.Controls.Add(_tabs); tabHost.Controls.Add(_tabActions);
+        _tabActions.BringToFront();
         void PositionTerminalToggle()
         {
             if (!_tabs.IsHandleCreated) return;
             var tab = _tabs.GetTabRect(_tabs.TabPages.IndexOf(_terminalPage));
+            _tabActions.SetBounds(tab.Right + 1, tab.Top, Math.Max(0, tabHost.ClientSize.Width - tab.Right - 2), tab.Height);
             _terminalToggle.Height = 28;
-            _terminalToggle.Location = new Point(tab.Right + 8, tab.Top + (tab.Height - _terminalToggle.Height) / 2);
-            _refreshWorkbook.Location = new Point(tabHost.ClientSize.Width - _refreshWorkbook.Width - 1, tab.Top + (tab.Height - _refreshWorkbook.Height) / 2);
-            _resetView.Location = new Point(_refreshWorkbook.Left - _resetView.Width - 8, tab.Top + (tab.Height - _resetView.Height) / 2);
+            var top = (tab.Height - _terminalToggle.Height) / 2;
+            _terminalToggle.Location = new Point(7, top);
+            _refreshWorkbook.Location = new Point(_tabActions.ClientSize.Width - _refreshWorkbook.Width - 4, top);
+            _resetView.Location = new Point(_refreshWorkbook.Left - _resetView.Width - 8, top);
+            _tabActions.BringToFront();
         }
         tabHost.Resize += (_, _) => PositionTerminalToggle();
         _tabs.HandleCreated += (_, _) => PositionTerminalToggle();
@@ -216,8 +219,7 @@ internal sealed class CollectorForm : Form
         _terminalToggle.Click += (_, _) => { if (_terminalSession is null) _terminalTask = OpenTerminalAsync(); else _terminalSession.Stop(); };
         _tabs.SelectedIndexChanged += (_, _) =>
         {
-            _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage) || _terminalSession is not null;
-            UpdateResetViewButton();
+            UpdateTabActions(_terminalSession is not null);
             PositionTerminalToggle();
             if (_terminalToggle.Visible) _terminalToggle.BringToFront();
             if (ReferenceEquals(_tabs.SelectedTab, recordsPage)) BeginInvoke((Action)(() => { if (!IsDisposed && ReferenceEquals(_tabs.SelectedTab, recordsPage)) _grid.Focus(); }));
@@ -265,7 +267,7 @@ internal sealed class CollectorForm : Form
         FormClosing += (_, _) => { _timer.Stop(); _statusPulse.Stop(); _statusFade.Stop(); _statusDisplay.Stop(); _closing.Cancel(); CancelSounds(); _terminalSession?.Stop(); try { _autoPlay.Dispose(); } catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(this, "AutoPlay could not be restored. Check Windows AutoPlay settings."); } };
         HandleCreated += (_, _) => ApplyTheme();
         SystemEvents.UserPreferenceChanged += SystemThemeChanged;
-        Disposed += (_, _) => { SystemEvents.UserPreferenceChanged -= SystemThemeChanged; _themeMenu.Dispose(); _theme.Image?.Dispose(); };
+        Disposed += (_, _) => { SystemEvents.UserPreferenceChanged -= SystemThemeChanged; _theme.Image?.Dispose(); };
         ApplyTheme();
     }
     private void SystemThemeChanged(object? sender, UserPreferenceChangedEventArgs args)
@@ -284,17 +286,15 @@ internal sealed class CollectorForm : Form
         SetTerminalIndicator(_terminalSession is not null);
         var oldIcon = _theme.Image; _theme.Image = CreateThemeIcon(_dark); oldIcon?.Dispose();
         oldIcon = _refreshWorkbook.Image; _refreshWorkbook.Image = CreateRefreshIcon(_dark); oldIcon?.Dispose();
-        _theme.AccessibleName = $"Choose Theme: {_themePreference}";
-        _toolTip.SetToolTip(_theme, $"Theme: {_themePreference} ({(_dark ? "Dark" : "Light")}). Choose System, Light, or Dark.");
-        foreach (ToolStripMenuItem item in _themeMenu.Items) item.Checked = item.Tag is ThemePreference preference && preference == _themePreference;
-        _themeMenu.Renderer = new ToolStripProfessionalRenderer(new ThemeMenuColors(_dark));
-        _themeMenu.ForeColor = CollectorTheme.Text(_dark);
-        foreach (ToolStripMenuItem item in _themeMenu.Items) item.ForeColor = _themeMenu.ForeColor;
+        var next = OppositeTheme(_dark);
+        _theme.AccessibleName = $"Switch to {next} Mode";
+        _toolTip.SetToolTip(_theme, $"Switch to {next} mode" + (_themePreference == ThemePreference.System ? " (currently following Windows)" : ""));
         _statusFade.Stop(); _fadeTo = _fadeFrom = CollectorTheme.Surface(_dark);
         if (_statusPanel is not null) _statusPanel.BackColor = _fadeTo;
-        _status.BackColor = _fadeTo;
+        _status.BackColor = _guidance.BackColor = _fadeTo;
         FadeStatusBackground(_statusTone); ColorizeStatus();
     }
+    private static ThemePreference OppositeTheme(bool dark) => dark ? ThemePreference.Light : ThemePreference.Dark;
     private DialogResult ShowThemedDialog(Form dialog)
     {
         CollectorTheme.Apply(dialog, _dark);
@@ -352,9 +352,60 @@ internal sealed class CollectorForm : Form
             if (input.Text != "Unchanged" || input.BackColor != CollectorTheme.Field(form._dark) ||
                 summary.BackColor != input.BackColor || link.LinkColor == input.BackColor)
                 throw new InvalidDataException("Theme changed dialog values or made links unreadable.");
-            using var bitmap = new Bitmap(form.Width, form.Height);
-            form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
-            bitmap.Save(Path.Combine(directory, $"Collector-Theme-{preference}.png"));
+            var statusPanel = form._statusPanel!;
+            var workbookHost = form._tabs.Parent!;
+            var banner = form._theme.Parent!.Parent!;
+            var statusLeft = statusPanel.Parent!.PointToScreen(statusPanel.Location).X;
+            if (form._pause.PointToScreen(Point.Empty).X != statusLeft ||
+                workbookHost.PointToScreen(Point.Empty).X != statusLeft ||
+                workbookHost.Width != statusPanel.Width ||
+                form._manual.Left - form._pause.Right != form._pause.Margin.Right || form._finish.Left - form._manual.Right != form._manual.Margin.Right ||
+                banner.Margin != Padding.Empty)
+                throw new InvalidDataException($"Inconsistent margins: pause={form._pause.PointToScreen(Point.Empty).X}, status={statusLeft}, tabs={workbookHost.PointToScreen(Point.Empty).X}, widths={workbookHost.Width}/{statusPanel.Width}.");
+            SavePreview(form, directory, preference.ToString());
+            form._viewChanged = true; form.UpdateResetViewButton();
+            form._tabs.SelectedIndex = 1;
+            VerifyHiddenActions(form, terminalEnabled: false);
+            SavePreview(form, directory, $"{preference}-Activity");
+            form._tabs.SelectedTab = form._terminalPage;
+            VerifyHiddenActions(form, terminalEnabled: false);
+            SavePreview(form, directory, $"{preference}-Terminal");
+            // Reproduce switching away while Terminal is active, then disabling it.
+            form.UpdateTabActions(terminalEnabled: true);
+            form._tabs.SelectedIndex = 1;
+            form.UpdateTabActions(terminalEnabled: true);
+            form.UpdateTabActions(terminalEnabled: false);
+            VerifyHiddenActions(form, terminalEnabled: false);
+            SavePreview(form, directory, $"{preference}-Terminal-Disabled");
+            form._tabs.SelectedIndex = 0;
+            form.UpdateTabActions(terminalEnabled: true);
+            form.UpdateTabActions(terminalEnabled: false);
+            if (!form._refreshWorkbook.Visible || !form._resetView.Visible || form._terminalToggle.Visible)
+                throw new InvalidDataException("Recorded Drives lost its view actions after Terminal stopped.");
+            form._viewChanged = false; form.UpdateResetViewButton();
+            form.ManualEntry(false, manual =>
+            {
+                var unit = manual.Controls.OfType<ThemedComboBox>().Single(c => c.AccessibleName == "Capacity Unit");
+                unit.SelectedItem = "GB";
+                unit.DroppedDown = true; Application.DoEvents();
+                if (!unit.DroppedDown || unit.Text != "GB" || unit.ForeColor == unit.BackColor)
+                    throw new InvalidDataException("Capacity dropdown lost its selection, list, or contrast.");
+                unit.DroppedDown = false; Application.DoEvents();
+                SavePreview(manual, directory, $"{preference}-Manual");
+                unit.SelectedItem = "Other";
+                if (!manual.Controls.OfType<Label>().Single(c => c.Text == "Custom Capacity Unit").Visible)
+                    throw new InvalidDataException("Custom capacity unit field did not appear.");
+            });
+            foreach (var tone in new[] { StatusTone.Paused, StatusTone.Success })
+            {
+                form._statusTone = tone;
+                form._status.Text = tone == StatusTone.Paused ? "Scanning is paused." : "Manual drive recorded.";
+                form.FadeStatusBackground(tone);
+                form._fadeStart = Stopwatch.GetTimestamp() - Stopwatch.Frequency;
+                form.AdvanceStatusFade(); form.ColorizeStatus();
+                SavePreview(form, directory, $"{preference}-Status-{tone}");
+            }
+            form._statusTone = StatusTone.Default; form._status.Text = "Initializing..."; form.ApplyTheme();
         }
         if (CollectorSettings.Theme() != savedPreference) throw new InvalidDataException("Theme preview changed the saved preference.");
         using var io = new EmbeddedTerminalIO();
@@ -362,6 +413,31 @@ internal sealed class CollectorForm : Form
         form.TerminalKeyPress(form, new KeyPressEventArgs('r'));
         if (!io.KeyAvailable || io.ReadKey() != 'R') throw new InvalidDataException("Embedded Terminal did not accept the removal shortcut.");
         form._terminalIO = null;
+    }
+    private static void SavePreview(Form form, string directory, string name)
+    {
+        Application.DoEvents();
+        using var bitmap = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+        bitmap.Save(Path.Combine(directory, $"Collector-Theme-{name}.png"));
+    }
+    private static void VerifyHiddenActions(CollectorForm form, bool terminalEnabled)
+    {
+        form.UpdateTabActions(terminalEnabled);
+        Application.DoEvents();
+        if (form._refreshWorkbook.Visible || form._resetView.Visible ||
+            form._terminalToggle.Visible != (terminalEnabled || form._tabs.SelectedTab == form._terminalPage))
+            throw new InvalidDataException("A tab showed actions that do not belong on it.");
+        using var bitmap = new Bitmap(form._tabActions.Width, form._tabActions.Height);
+        form._tabActions.DrawToBitmap(bitmap, form._tabActions.ClientRectangle);
+        foreach (var button in new[] { form._refreshWorkbook, form._resetView, form._terminalToggle }.Where(b => !b.Visible))
+        {
+            var bounds = Rectangle.Intersect(button.Bounds, form._tabActions.ClientRectangle);
+            for (var x = bounds.Left + 2; x < bounds.Right - 2; x++)
+                for (var y = bounds.Top + 2; y < bounds.Bottom - 2; y++)
+                    if (bitmap.GetPixel(x, y).ToArgb() != form._tabActions.BackColor.ToArgb())
+                        throw new InvalidDataException("Hidden tab action left an unpainted rectangle.");
+        }
     }
     private void Log(string text) { try { File.AppendAllText(_logPath, $"{DateTime.Now:O} {text}\n"); } catch { } }
     private static Bitmap CreateRefreshIcon(bool dark = false)
@@ -487,7 +563,7 @@ internal sealed class CollectorForm : Form
         byte Channel(byte a, byte b) => (byte)Math.Round(a + (b - a) * eased);
         var color = Color.FromArgb(Channel(_fadeFrom.R, _fadeTo.R), Channel(_fadeFrom.G, _fadeTo.G), Channel(_fadeFrom.B, _fadeTo.B));
         _statusPanel.BackColor = color;
-        _status.BackColor = color;
+        _status.BackColor = _guidance.BackColor = color;
         if (progress >= 1) _statusFade.Stop();
     }
     private void CancelSounds()
@@ -776,12 +852,18 @@ internal sealed class CollectorForm : Form
         _viewChanged = true;
         UpdateResetViewButton();
     }
+    private void UpdateTabActions(bool terminalEnabled)
+    {
+        _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage) || terminalEnabled;
+        UpdateResetViewButton();
+    }
     private void UpdateResetViewButton()
     {
         _resetView.Visible = _viewChanged && _tabs.SelectedIndex == 0;
         _refreshWorkbook.Visible = _tabs.SelectedIndex == 0;
         if (_resetView.Visible) _resetView.BringToFront();
         if (_refreshWorkbook.Visible) _refreshWorkbook.BringToFront();
+        _tabActions.Invalidate(true);
     }
     private void ReloadWorkbook()
     {
@@ -939,7 +1021,7 @@ internal sealed class CollectorForm : Form
                 _terminalInput.PlaceholderText = ""; _terminalInput.Text = "Terminal disabled"; _terminalInput.Enabled = false; _terminalInputFrame.BackColor = CollectorTheme.Surface(_dark); _terminalSend.Enabled = false;
                 _manual.Enabled = true; _setup.Enabled = true;
                 SetTerminalIndicator(false);
-                _terminalToggle.Visible = ReferenceEquals(_tabs.SelectedTab, _terminalPage);
+                UpdateTabActions(terminalEnabled: false);
             }
             _modal = false;
             if (!_closing.IsCancellationRequested) PlayDriveNotification(DriveNotification.TerminalDisabled);
@@ -1110,7 +1192,7 @@ internal sealed class CollectorForm : Form
         }
         finally { _modal = false; }
     }
-    private void ManualEntry(bool copyLast)
+    private void ManualEntry(bool copyLast, Action<Form>? preview = null)
     {
         if (_busy) { MessageBox.Show(this, "Wait for the current drive read to finish before entering a manual record.", "Manual Drive Entry"); return; }
         _modal = true;
@@ -1122,13 +1204,13 @@ internal sealed class CollectorForm : Form
             for (int i = 0; i < labels.Length; i++) dialog.Controls.Add(new Label { Text = labels[i], Bounds = new Rectangle(20, 47 + 43 * i, 195, 26) });
             var manufacturer = Box(219, 47, 320); var model = Box(219, 90, 320); var serial = Box(219, 133, 320); var amount = Box(219, 176, 175);
             model.CharacterCasing = CharacterCasing.Upper; serial.CharacterCasing = CharacterCasing.Upper;
-            var unit = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Bounds = new Rectangle(405, 176, 134, 28), AccessibleName = "Capacity Unit" };
+            var unit = new ThemedComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Bounds = new Rectangle(405, 176, 134, 28), AccessibleName = "Capacity Unit" };
             _toolTip.SetToolTip(unit, "Capacity Unit");
             unit.Items.AddRange(["N/A", "B", "KB", "MB", "GB", "TB", "PB", "Other"]); unit.SelectedIndex = 0;
             var customUnitLabel = new Label { Text = "Custom Capacity Unit", Bounds = new Rectangle(20, 219, 195, 26) };
             var customUnit = Box(219, 219, 320);
             var typeLabel = new Label { Text = "5. Drive Type", Bounds = new Rectangle(20, 219, 195, 26) };
-            var type = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
+            var type = new ThemedComboBox { DropDownStyle = ComboBoxStyle.DropDown, AutoCompleteMode = AutoCompleteMode.None, Bounds = new Rectangle(219, 219, 320, 28), MaxDropDownItems = 15, IntegralHeight = true };
             var types = DriveTypes.Options;
             type.Items.AddRange(types.Cast<object>().ToArray());
             type.SelectedIndex = 0;
@@ -1236,7 +1318,15 @@ internal sealed class CollectorForm : Form
                 }
                 catch (Exception ex) { Log(ex.ToString()); MessageBox.Show(dialog, ex.Message, "Manual Drive Entry", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             };
-            dialog.Controls.AddRange([review, copy, back]); ShowThemedDialog(dialog);
+            dialog.Controls.AddRange([review, copy, back]);
+            if (preview is null) ShowThemedDialog(dialog);
+            else
+            {
+                CollectorTheme.Apply(dialog, _dark);
+                dialog.Show(this); Application.DoEvents();
+                preview(dialog);
+                dialog.Close();
+            }
             void Fill(DriveRecord record)
             {
                 manufacturer.Text = record["Manufacturer"] == "N/A" ? "" : record["Manufacturer"];
