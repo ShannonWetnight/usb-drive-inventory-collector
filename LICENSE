@@ -47,7 +47,7 @@ upstream project for the license and source code.
 
 The notices below cover the collector's dependencies and bundled Windows
 runtime. Build tools, test dependencies and notices specific to other platforms
-are excluded where their absence was verified. See docs/license-audit.md for
+are excluded where their absence was verified. See .github/docs/license-audit.md for
 the dependency inventory and exclusion evidence. Runtime notices are from
 .NET 8.0.31, the version bundled by SDK 8.0.425 at the time of this audit.
 
