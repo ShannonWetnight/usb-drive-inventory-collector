@@ -36,26 +36,26 @@
 
 ## Showcase
 
-The preview cycles through the app's tabs and dialogs every six seconds. Captures use the default opening sizes and fictional sample records. Smaller windows are centered in the animation without scaling. The Terminal capture shows the tab before its session is enabled.
+The preview cycles through the app's tabs and dialogs every 4.5 seconds. Each function appears in Light Theme, then Dark Theme, using default opening sizes and fictional sample records. Smaller windows are centered in the animation without scaling. The Terminal capture shows the tab before its session is enabled.
 
 ![USB Drive Inventory Collector function showcase](.github/showcase/showcase_functions.gif)
 
 <details>
-<summary>View individual PNG screenshots in either theme</summary>
+<summary>View Individual PNG Screenshots</summary>
 
-| Function | Dark theme | Light theme |
+| Function | Light Theme | Dark Theme |
 | --- | --- | --- |
-| Recorded Drives | [PNG](.github/showcase/showcase_recorded_drives.png) | [PNG](.github/showcase/showcase_recorded_drives2.png) |
-| Manual Drive Entry | [PNG](.github/showcase/showcase_manual_entry.png) | [PNG](.github/showcase/showcase_manual_entry2.png) |
-| Review entry | [PNG](.github/showcase/showcase_review_entry.png) | [PNG](.github/showcase/showcase_review_entry2.png) |
-| Duplicate serial warning | [PNG](.github/showcase/showcase_duplicate_serial.png) | [PNG](.github/showcase/showcase_duplicate_serial2.png) |
-| Edit entry and Remove Entry option | [PNG](.github/showcase/showcase_edit_entry.png) | [PNG](.github/showcase/showcase_edit_entry2.png) |
-| Removal confirmation | [PNG](.github/showcase/showcase_remove_entry.png) | [PNG](.github/showcase/showcase_remove_entry2.png) |
-| Workbook Setup | [PNG](.github/showcase/showcase_workbook_setup.png) | [PNG](.github/showcase/showcase_workbook_setup2.png) |
-| Activity history | [PNG](.github/showcase/showcase_activity.png) | [PNG](.github/showcase/showcase_activity2.png) |
-| Terminal tab | [PNG](.github/showcase/showcase_terminal.png) | [PNG](.github/showcase/showcase_terminal2.png) |
-| Paused scanning | [PNG](.github/showcase/showcase_paused_scanning.png) | [PNG](.github/showcase/showcase_paused_scanning2.png) |
-| Version Information | [PNG](.github/showcase/showcase_version_info.png) | [PNG](.github/showcase/showcase_version_info2.png) |
+| Recorded Drives | [PNG](.github/showcase/showcase_recorded_drives_light_mode.png) | [PNG](.github/showcase/showcase_recorded_drives_dark_mode.png) |
+| Manual Drive Entry | [PNG](.github/showcase/showcase_manual_entry_light_mode.png) | [PNG](.github/showcase/showcase_manual_entry_dark_mode.png) |
+| Review Entry | [PNG](.github/showcase/showcase_review_entry_light_mode.png) | [PNG](.github/showcase/showcase_review_entry_dark_mode.png) |
+| Duplicate Serial Warning | [PNG](.github/showcase/showcase_duplicate_serial_light_mode.png) | [PNG](.github/showcase/showcase_duplicate_serial_dark_mode.png) |
+| Edit Entry and Remove Entry Option | [PNG](.github/showcase/showcase_edit_entry_light_mode.png) | [PNG](.github/showcase/showcase_edit_entry_dark_mode.png) |
+| Removal Confirmation | [PNG](.github/showcase/showcase_remove_entry_light_mode.png) | [PNG](.github/showcase/showcase_remove_entry_dark_mode.png) |
+| Workbook Setup | [PNG](.github/showcase/showcase_workbook_setup_light_mode.png) | [PNG](.github/showcase/showcase_workbook_setup_dark_mode.png) |
+| Activity History | [PNG](.github/showcase/showcase_activity_light_mode.png) | [PNG](.github/showcase/showcase_activity_dark_mode.png) |
+| Terminal Tab | [PNG](.github/showcase/showcase_terminal_light_mode.png) | [PNG](.github/showcase/showcase_terminal_dark_mode.png) |
+| Paused Scanning | [PNG](.github/showcase/showcase_paused_scanning_light_mode.png) | [PNG](.github/showcase/showcase_paused_scanning_dark_mode.png) |
+| Version Information | [PNG](.github/showcase/showcase_version_info_light_mode.png) | [PNG](.github/showcase/showcase_version_info_dark_mode.png) |
 
 </details>
 

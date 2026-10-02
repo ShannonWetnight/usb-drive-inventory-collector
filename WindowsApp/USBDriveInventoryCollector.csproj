@@ -15,6 +15,9 @@
     <RepositoryUrl>https://github.com/ShannonWetnight/usb-drive-inventory-collector</RepositoryUrl>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(ShowcaseCapture)' == 'true'">
+    <DefineConstants>$(DefineConstants);SHOWCASE_CAPTURE</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <None Include="../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />

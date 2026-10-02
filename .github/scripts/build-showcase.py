@@ -3,20 +3,26 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 FOLDER = Path(__file__).resolve().parents[1] / "showcase"
-SLIDES = [
-    ("recorded_drives", "Recorded Drives - dark theme"),
-    ("recorded_drives2", "Recorded Drives - light theme"),
+FUNCTIONS = [
+    ("recorded_drives", "Recorded Drives"),
     ("manual_entry", "Manual Drive Entry"),
-    ("review_entry", "Review before saving"),
-    ("duplicate_serial", "Duplicate serial protection"),
-    ("edit_entry", "Edit a recorded drive"),
-    ("remove_entry", "Confirm entry removal"),
-    ("workbook_setup", "Workbook columns and save locations"),
-    ("activity", "Activity history"),
-    ("terminal", "Embedded Terminal tab (before enabling)"),
-    ("paused_scanning", "Pause and resume scanning"),
-    ("version_info", "Version Information and license details"),
+    ("review_entry", "Review Before Saving"),
+    ("duplicate_serial", "Duplicate Serial Protection"),
+    ("edit_entry", "Edit a Recorded Drive"),
+    ("remove_entry", "Confirm Entry Removal"),
+    ("workbook_setup", "Workbook Columns and Save Locations"),
+    ("activity", "Activity History"),
+    ("terminal", "Embedded Terminal Tab (Before Enabling)"),
+    ("paused_scanning", "Pause and Resume Scanning"),
+    ("version_info", "Version Information and License Details"),
 ]
+SLIDES = [
+    (f"{name}_{mode}_mode", f"{label} - {theme} Theme")
+    for name, label in FUNCTIONS
+    for mode, theme in [("light", "Light"), ("dark", "Dark")]
+]
+FRAME_DURATION_MS = 4500
+
 
 
 def main():
@@ -34,13 +40,13 @@ def main():
         # The original PNGs remain unchanged. GIF palettes use at most 256 colors.
         frames.append(frame.quantize(colors=256, method=Image.Quantize.MEDIANCUT))
     target = FOLDER / "showcase_functions.gif"
-    frames[0].save(target, save_all=True, append_images=frames[1:], duration=6000, loop=0, disposal=2, optimize=False)
+    frames[0].save(target, save_all=True, append_images=frames[1:], duration=FRAME_DURATION_MS, loop=0, disposal=2, optimize=False)
     with Image.open(target) as gif:
         assert gif.n_frames == len(SLIDES)
         for index in range(gif.n_frames):
             gif.seek(index)
-            assert gif.info["duration"] == 6000
-    print(f"Saved {target.name}: {len(frames)} frames, 6 seconds each, {width}x{height}, {target.stat().st_size:,} bytes")
+            assert gif.info["duration"] == FRAME_DURATION_MS
+    print(f"Saved {target.name}: {len(frames)} frames, 4.5 seconds each, {width}x{height}, {target.stat().st_size:,} bytes")
 
 
 if __name__ == "__main__":

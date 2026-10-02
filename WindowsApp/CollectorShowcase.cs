@@ -1,3 +1,4 @@
+#if SHOWCASE_CAPTURE
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -25,9 +26,9 @@ internal sealed partial class CollectorForm
         form.Show();
         Application.DoEvents();
         var captures = new List<object>();
-        foreach (var preference in new[] { ThemePreference.Dark, ThemePreference.Light })
+        foreach (var preference in new[] { ThemePreference.Light, ThemePreference.Dark })
         {
-            var suffix = preference == ThemePreference.Light ? "2" : "";
+            var suffix = preference == ThemePreference.Light ? "light_mode" : "dark_mode";
             form._themePreference = preference;
             form._tabs.SelectedIndex = 0;
             form._paused = false;
@@ -123,9 +124,19 @@ internal sealed partial class CollectorForm
                     }
                 if (samples == 0 || black > samples * 0.9)
                     throw new InvalidDataException($"Windows returned a blank capture for {title} ({preference}).");
-                var file = $"showcase_{name}{suffix}.png";
-                bitmap.Save(Path.Combine(directory, file), ImageFormat.Png);
-                captures.Add(new { file, theme = preference.ToString(), title, width, height });
+                // Win32 bounds include invisible resize margins. DWM reports
+                // the visible frame in the same physical pixels for this DPI-aware app.
+                if (DwmGetWindowAttribute(handle, 9, out var visible, Marshal.SizeOf<NativeRect>()) != 0)
+                    throw new InvalidOperationException("Cannot read visible window bounds.");
+                var crop = new Rectangle(visible.Left - rect.Left, visible.Top - rect.Top,
+                    visible.Right - visible.Left, visible.Bottom - visible.Top);
+                if (crop.Width <= 0 || crop.Height <= 0 || !new Rectangle(0, 0, width, height).Contains(crop))
+                    throw new InvalidDataException("Visible window bounds do not fit the native capture.");
+                using var framed = bitmap.Clone(crop, PixelFormat.Format32bppArgb);
+                var file = $"showcase_{name}_{suffix}.png";
+                framed.Save(Path.Combine(directory, file), ImageFormat.Png);
+                captures.Add(new { file, theme = preference.ToString(), title, width = crop.Width, height = crop.Height,
+                    windowWidth = width, windowHeight = height, cropLeft = crop.Left, cropTop = crop.Top });
             }
         }
         if (CollectorSettings.Theme() != savedPreference || form._book.Records.Count != 3)
@@ -173,9 +184,12 @@ internal sealed partial class CollectorForm
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, uint attribute, out NativeRect rect, int size);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
     [DllImport("user32.dll")] private static extern bool PrintWindow(IntPtr window, IntPtr dc, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string? className, string title);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
     [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 }
+
+#endif

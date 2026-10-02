@@ -54,6 +54,7 @@ internal static class Program
             catch (Exception ex) { File.WriteAllText(args[1] + ".error.txt", ex.ToString()); Environment.ExitCode = 1; }
             return;
         }
+#if SHOWCASE_CAPTURE
         if (args.Length == 2 && args[0] == "--capture-showcase")
         {
             Directory.CreateDirectory(args[1]);
@@ -69,6 +70,7 @@ internal static class Program
             }
             return;
         }
+#endif
         var oldMode = SetErrorMode(0x0001 | 0x8000);
         SetErrorMode(oldMode | 0x0001 | 0x8000);
         var terminal = args.Length == 1 && args[0].Equals("--terminal", StringComparison.OrdinalIgnoreCase);

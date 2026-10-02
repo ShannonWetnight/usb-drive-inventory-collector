@@ -302,6 +302,7 @@ internal sealed partial class CollectorForm : Form
         dialog.HandleCreated += updateTitle;
         try
         {
+#if SHOWCASE_CAPTURE
             if (_showcasePreview is null) return dialog.ShowDialog(this);
             Exception? captureError = null;
             using var captureTimer = new System.Windows.Forms.Timer { Interval = 200 };
@@ -316,6 +317,9 @@ internal sealed partial class CollectorForm : Form
             var result = dialog.ShowDialog(this);
             if (captureError is not null) throw captureError;
             return result;
+#else
+            return dialog.ShowDialog(this);
+#endif
         }
         finally { dialog.HandleCreated -= updateTitle; }
     }
