@@ -14,7 +14,6 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/ShannonWetnight/usb-drive-inventory-collector</RepositoryUrl>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <DefineConstants Condition="'$(ShowcaseCapture)' == 'true'">$(DefineConstants);SHOWCASE_CAPTURE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <None Include="../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />

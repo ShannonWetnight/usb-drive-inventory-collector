@@ -59,8 +59,6 @@ The preview cycles through the app's tabs and dialogs every 4.5 seconds. Each fu
 
 </details>
 
-The [capture instructions](.github/showcase/README.md) explain how to refresh the screenshots and GIF.
-
 ## Download and Run
 
 The next tagged version is **4.3.5**. Signed Windows x64 builds are published on the [GitHub Releases page](https://github.com/ShannonWetnight/usb-drive-inventory-collector/releases). The build produces `USB-Drive-Inventory-Collector-v4.3.5.exe`. Download the release asset, double-click it, and approve the administrator prompt. No PowerShell execution-policy change is required.
@@ -176,6 +174,6 @@ The collector depends on work by these projects and their contributors:
 | [Windows Presentation Foundation (WPF)](https://github.com/dotnet/wpf) | Bundled by the self-contained Windows Desktop runtime. | .NET Foundation and Contributors; [MIT source license](https://github.com/dotnet/wpf/blob/v8.0.31/LICENSE.TXT), component notices, and Windows binary terms. |
 | [smartmontools / smartctl](https://www.smartmontools.org/) | Reads drive identity and SMART information for automatic scanning. | smartmontools developers; [GPL-2.0-or-later source](https://github.com/smartmontools/smartmontools). Installed separately and invoked as an external program. |
 
-License text, applicable component notices, and links to Microsoft Windows binary terms appear under **Attributions:** in [LICENSE](LICENSE), after the collector's MIT license. Keep this combined file with distributed copies. The [license audit](docs/license-audit.md) records the published dependencies and excluded build, test, and platform notices. Project links also appear at the bottom of **Version Information**.
+License text, applicable component notices, and links to Microsoft Windows binary terms appear under **Attributions:** in [LICENSE](LICENSE), after the collector's MIT license. Keep this combined file with distributed copies. The [license audit](.github/docs/license-audit.md) records the published dependencies and excluded build, test, and platform notices. Project links also appear at the bottom of **Version Information**.
 
 The self-contained Windows release bundles .NET and Windows Desktop libraries, including WPF binaries even though the collector uses Windows Forms. Their component notices apply to the distributed executable. The collector's own source code is MIT-licensed; Microsoft's .NET Library and Windows SDK licenses apply to the Windows binaries identified in LICENSE.
