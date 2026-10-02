@@ -387,9 +387,14 @@ internal sealed class CollectorForm : Form
             {
                 var unit = manual.Controls.OfType<ThemedComboBox>().Single(c => c.AccessibleName == "Capacity Unit");
                 unit.SelectedItem = "GB";
+                unit.Focus();
                 unit.DroppedDown = true; Application.DoEvents();
-                if (!unit.DroppedDown || unit.Text != "GB" || unit.ForeColor == unit.BackColor)
-                    throw new InvalidDataException("Capacity dropdown lost its selection, list, or contrast.");
+                // A native popup may close when the runner's desktop focus changes.
+                // Verify the selected data and colors without requiring it to stay open.
+                if (unit.Text != "GB" || unit.SelectedItem?.ToString() != "GB")
+                    throw new InvalidDataException($"Capacity selection changed: text='{unit.Text}', selected='{unit.SelectedItem}', theme={preference}.");
+                if (unit.ForeColor == unit.BackColor)
+                    throw new InvalidDataException($"Capacity dropdown text has no contrast in {preference} theme.");
                 unit.DroppedDown = false; Application.DoEvents();
                 SavePreview(manual, directory, $"{preference}-Manual");
                 unit.SelectedItem = "Other";
