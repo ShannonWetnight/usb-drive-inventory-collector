@@ -346,6 +346,27 @@ internal sealed class CollectorForm : Form
                 form._grid.DefaultCellStyle.BackColor != CollectorTheme.Field(form._dark) ||
                 form._grid.Rows[0].Cells["SerialNumber"].Value?.ToString() != "THEME-SERIAL")
                 throw new InvalidDataException("Theme changed header spacing, grid colors, or recorded values.");
+            var removalSample = new DriveRecord { ["Model"] = "DEMO-SATA-SSD", ["SerialNumber"] = "DEMO-0001" };
+            using (var confirmation = CreateRemovalConfirmation(0, removalSample, form._dark))
+            {
+                var no = confirmation.Controls.OfType<Button>().Single(b => b.Text == "No");
+                var body = confirmation.Controls.OfType<Label>().Single();
+                if (confirmation.AcceptButton != no || confirmation.CancelButton != no ||
+                    confirmation.BackColor != CollectorTheme.Surface(form._dark) || body.BackColor != confirmation.BackColor ||
+                    body.ForeColor == body.BackColor || !body.Text.Contains("Model: DEMO-SATA-SSD\nSerial: DEMO-0001"))
+                    throw new InvalidDataException("Removal confirmation lost its theme, saved identity, or safe default.");
+                confirmation.Show(form);
+                Application.DoEvents();
+                if (confirmation.ActiveControl != no) throw new InvalidDataException("Removal confirmation did not focus No.");
+                no.PerformClick();
+                if (confirmation.DialogResult != DialogResult.No) throw new InvalidDataException("Removal cancellation was not preserved.");
+            }
+            using (var confirmation = CreateRemovalConfirmation(0, removalSample, form._dark))
+            {
+                confirmation.Show(form);
+                confirmation.Controls.OfType<Button>().Single(b => b.Text == "Yes").PerformClick();
+                if (confirmation.DialogResult != DialogResult.Yes) throw new InvalidDataException("Removal confirmation did not accept Yes.");
+            }
             using var dialog = new Form();
             var input = new TextBox { Text = "Unchanged", Dock = DockStyle.Top };
             var link = new LinkLabel { Text = "Attributions", Dock = DockStyle.Top };
@@ -1128,6 +1149,31 @@ internal sealed class CollectorForm : Form
         finally { _modal = false; }
     }
     private static Button Button(string text, int x, int y, int width) => new() { Text = text, Bounds = new Rectangle(x, y, width, 34) };
+    private static Form CreateRemovalConfirmation(int index, DriveRecord saved, bool dark)
+    {
+        var message = $"Remove the saved entry in workbook row {index + 2}?\n\nModel: {saved["Model"]}\nSerial: {saved["SerialNumber"]}\n\nThis removes the row from the workbook. Unsaved edits in this dialog will be discarded.";
+        var font = new Font("Segoe UI", 9);
+        var height = TextRenderer.MeasureText(message, font, new Size(370, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+        var dialog = new Form
+        {
+            Text = "Confirm Remove Entry", Font = font, ClientSize = new Size(440, height + 90),
+            FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
+            MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false
+        };
+        var warning = new PictureBox { Image = SystemIcons.Warning.ToBitmap(), Bounds = new Rectangle(16, 18, 32, 32), SizeMode = PictureBoxSizeMode.CenterImage };
+        dialog.Disposed += (_, _) => { warning.Image?.Dispose(); font.Dispose(); };
+        var body = new Label { Text = message, Bounds = new Rectangle(56, 18, 370, height) };
+        var no = new Button { Text = "No", DialogResult = DialogResult.No, Bounds = new Rectangle(332, height + 46, 90, 30) };
+        var yes = new Button { Text = "Yes", DialogResult = DialogResult.Yes, Bounds = new Rectangle(232, height + 46, 90, 30) };
+        dialog.Controls.AddRange([warning, body, yes, no]);
+        dialog.AcceptButton = no;
+        dialog.CancelButton = no;
+        dialog.Shown += (_, _) => no.Select();
+        CollectorTheme.Apply(dialog, dark);
+        dialog.HandleCreated += (_, _) => CollectorTheme.ApplyTitleBar(dialog, dark);
+        return dialog;
+    }
     private void EditRecord(int index)
     {
         if (_terminalSession is not null) { MessageBox.Show(this, "Disable Terminal before editing a recorded drive.", "Edit Recorded Drive"); return; }
@@ -1162,10 +1208,8 @@ internal sealed class CollectorForm : Form
             remove.Click += (_, _) =>
             {
                 var saved = _book.Records[index];
-                if (MessageBox.Show(dialog,
-                    $"Remove the saved entry in workbook row {index + 2}?\n\nModel: {saved["Model"]}\nSerial: {saved["SerialNumber"]}\n\nThis removes the row from the workbook. Unsaved edits in this dialog will be discarded.",
-                    "Confirm Remove Entry", MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
-                    MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                using var confirmation = CreateRemovalConfirmation(index, saved, _dark);
+                if (confirmation.ShowDialog(dialog) != DialogResult.Yes) return;
                 try
                 {
                     _book.Remove(index);
